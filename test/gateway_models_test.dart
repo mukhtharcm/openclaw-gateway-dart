@@ -59,6 +59,32 @@ void main() {
     expect(options.toConnectParams()['minProtocol'], gatewayProtocolVersion);
   });
 
+  test('defaults node connect options', () {
+    final options = GatewayConnectOptions.forNode(
+      uri: Uri.parse('wss://gateway.example'),
+      auth: const GatewayAuth.none(),
+      clientInfo: const GatewayClientInfo(
+        id: GatewayClientIds.nodeHost,
+        version: '0.1.0',
+        platform: 'dart',
+        mode: GatewayClientModes.node,
+      ),
+      caps: const ['camera'],
+      commands: const ['camera.list'],
+      permissions: const {'camera': true},
+    );
+
+    expect(options.role, gatewayNodeRole);
+    expect(options.scopes, isEmpty);
+    expect(options.caps, ['camera']);
+    expect(options.commands, ['camera.list']);
+    expect(options.permissions, {'camera': true});
+    expect(
+      options.toConnectParams(),
+      containsPair('commands', ['camera.list']),
+    );
+  });
+
   test('exposes canonical gateway client ids and modes', () {
     expect(GatewayClientIds.values, contains(GatewayClientIds.gatewayClient));
     expect(GatewayClientIds.values, contains(GatewayClientIds.nodeHost));

@@ -12,9 +12,11 @@ export 'src/devices_client.dart';
 export 'src/device_identity.dart';
 export 'src/device_token_store.dart';
 export 'src/errors.dart';
+export 'src/identity_store.dart';
 export 'src/models.dart';
 export 'src/node_client.dart';
 export 'src/node_models.dart';
+export 'src/node_router.dart';
 export 'src/nodes_client.dart';
 export 'src/operator_client.dart';
 export 'src/protocol.dart'

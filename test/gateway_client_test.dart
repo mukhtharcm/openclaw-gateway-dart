@@ -267,6 +267,201 @@ void main() {
       await client.close();
     });
 
+    test('node capability registry snapshots connect metadata', () async {
+      final registry = GatewayNodeCapabilityRegistry(
+        capabilities: const [
+          GatewayNodeCapability(name: 'camera'),
+          GatewayNodeCapability(name: 'camera'),
+          GatewayNodeCapability(
+            name: 'location',
+            isEnabled: _disabledAvailability,
+          ),
+        ],
+        commands: const [
+          GatewayNodeCommand(
+            name: 'camera.list',
+            capabilities: ['camera'],
+            handler: _noopNodeCommand,
+          ),
+          GatewayNodeCommand(
+            name: 'location.get',
+            capabilities: ['location'],
+            isAvailable: _disabledAvailability,
+            handler: _noopNodeCommand,
+          ),
+        ],
+        permissionsResolver: () async => const {
+          'notifications': false,
+          'camera': true,
+        },
+      );
+
+      final snapshot = await registry.snapshot();
+      expect(snapshot.capabilities, ['camera']);
+      expect(snapshot.commands, ['camera.list']);
+      expect(snapshot.permissions, {'camera': true, 'notifications': false});
+
+      final options = await registry.buildConnectOptions(
+        uri: Uri.parse('ws://gateway.test'),
+        auth: const GatewayAuth.token('shared-token'),
+        clientInfo: const GatewayClientInfo(
+          id: GatewayClientIds.nodeHost,
+          version: '0.1.0',
+          platform: 'dart',
+          mode: GatewayClientModes.node,
+        ),
+      );
+      expect(options.role, gatewayNodeRole);
+      expect(options.commands, ['camera.list']);
+    });
+
+    test('node capability registry dispatches invoke requests', () async {
+      final channel = FakeWebSocketChannel();
+      unawaited(
+        _completeSuccessfulHandshake(
+          channel,
+          expectedRole: gatewayNodeRole,
+        ),
+      );
+
+      final client = await _connectClient(
+        channel,
+        role: gatewayNodeRole,
+        clientInfo: const GatewayClientInfo(
+          id: GatewayClientIds.nodeHost,
+          version: '0.1.0',
+          platform: 'dart',
+          mode: GatewayClientModes.node,
+        ),
+      );
+      final registry = GatewayNodeCapabilityRegistry(
+        commands: [
+          GatewayNodeCommand(
+            name: 'echo',
+            handler: (context) async => GatewayNodeCommandResult.ok(
+              payload: {'echo': context.params},
+            ),
+          ),
+        ],
+      );
+      final subscription = registry.attach(client);
+
+      channel.sendJson({
+        'type': 'event',
+        'event': 'node.invoke.request',
+        'payload': {
+          'id': 'invoke-echo',
+          'nodeId': 'node-1',
+          'command': 'echo',
+          'params': {'hello': 'world'},
+        },
+      });
+      final invokeResultRequest = await channel.nextClientJson();
+      expect(invokeResultRequest['method'], 'node.invoke.result');
+      expect(invokeResultRequest['params'], {
+        'id': 'invoke-echo',
+        'nodeId': 'node-1',
+        'ok': true,
+        'payload': {
+          'echo': {'hello': 'world'}
+        },
+      });
+      channel.sendJson({
+        'type': 'res',
+        'id': invokeResultRequest['id'],
+        'ok': true,
+        'payload': {'ok': true},
+      });
+
+      channel.sendJson({
+        'type': 'event',
+        'event': 'node.invoke.request',
+        'payload': {
+          'id': 'invoke-fail',
+          'nodeId': 'node-1',
+          'command': 'explode',
+          'params': {'boom': true},
+        },
+      });
+      final unsupportedResultRequest = await channel.nextClientJson();
+      expect(unsupportedResultRequest['method'], 'node.invoke.result');
+      expect(
+        unsupportedResultRequest['params'],
+        containsPair(
+          'error',
+          containsPair('code', 'unsupported_command'),
+        ),
+      );
+      channel.sendJson({
+        'type': 'res',
+        'id': unsupportedResultRequest['id'],
+        'ok': true,
+        'payload': {'ok': true},
+      });
+
+      await subscription.cancel();
+      await client.close();
+    });
+
+    test('node capability registry turns handler exceptions into errors',
+        () async {
+      final channel = FakeWebSocketChannel();
+      unawaited(
+        _completeSuccessfulHandshake(
+          channel,
+          expectedRole: gatewayNodeRole,
+        ),
+      );
+
+      final client = await _connectClient(
+        channel,
+        role: gatewayNodeRole,
+        clientInfo: const GatewayClientInfo(
+          id: GatewayClientIds.nodeHost,
+          version: '0.1.0',
+          platform: 'dart',
+          mode: GatewayClientModes.node,
+        ),
+      );
+      final registry = GatewayNodeCapabilityRegistry(
+        commands: [
+          GatewayNodeCommand(
+            name: 'explode',
+            handler: (context) => throw StateError('boom'),
+          ),
+        ],
+      );
+      final subscription = registry.attach(client);
+
+      channel.sendJson({
+        'type': 'event',
+        'event': 'node.invoke.request',
+        'payload': {
+          'id': 'invoke-explode',
+          'nodeId': 'node-1',
+          'command': 'explode',
+        },
+      });
+      final invokeResultRequest = await channel.nextClientJson();
+      expect(invokeResultRequest['method'], 'node.invoke.result');
+      expect(
+        invokeResultRequest['params'],
+        containsPair(
+          'error',
+          containsPair('code', 'handler_error'),
+        ),
+      );
+      channel.sendJson({
+        'type': 'res',
+        'id': invokeResultRequest['id'],
+        'ok': true,
+        'payload': {'ok': true},
+      });
+
+      await subscription.cancel();
+      await client.close();
+    });
+
     test('throws GatewayResponseException for request errors', () async {
       final channel = FakeWebSocketChannel();
       unawaited(_completeSuccessfulHandshake(channel));
@@ -572,6 +767,14 @@ void main() {
   });
 }
 
+Future<bool> _disabledAvailability() async => false;
+
+Future<GatewayNodeCommandResult> _noopNodeCommand(
+  GatewayNodeCommandContext context,
+) async {
+  return const GatewayNodeCommandResult.ok();
+}
+
 Future<GatewayClient> _connectClient(
   FakeWebSocketChannel channel, {
   GatewayAuth auth = const GatewayAuth.token('shared-token'),
@@ -653,6 +856,7 @@ Future<void> _completeSuccessfulHandshake(
   FakeWebSocketChannel channel, {
   String connId = 'conn-test',
   int tickIntervalMs = 30000,
+  String expectedRole = gatewayDefaultRole,
 }) async {
   await Future<void>.delayed(Duration.zero);
   channel.sendJson(_connectChallengeEvent());
@@ -663,7 +867,7 @@ Future<void> _completeSuccessfulHandshake(
 
   final params = Map<String, Object?>.from(connectRequest['params'] as Map);
   expect(params['minProtocol'], gatewayProtocolVersion);
-  expect(params['role'], 'operator');
+  expect(params['role'], expectedRole);
 
   channel.sendJson({
     'type': 'res',

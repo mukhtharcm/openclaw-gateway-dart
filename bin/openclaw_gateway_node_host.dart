@@ -1,9 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:openclaw_gateway/openclaw_gateway.dart';
+import 'package:openclaw_gateway/openclaw_gateway_io.dart';
 
 const String _defaultClientVersion = '0.1.0';
 const String _defaultDisplayName = 'OpenClaw Dart Node Host';
@@ -32,11 +32,13 @@ Future<void> main(List<String> arguments) async {
     final uri = _readRequiredUri(args, env);
     final auth = _resolveAuth(args, env);
     final statePath = _resolveStatePath(args);
-    final state = await _NodeHostState.open(statePath);
-    final identity = await state.loadOrCreateIdentity();
-    final store = _NodeHostDeviceTokenStore(state);
-    final commands = args.multiOption('command');
-    final caps = args.multiOption('cap');
+    final store = GatewayJsonFileAuthStateStore(path: statePath);
+    final identity = await store.readOrCreateIdentity();
+    final registry = _buildRegistry(
+      commands: args.multiOption('command'),
+      caps: args.multiOption('cap'),
+    );
+    final snapshot = await registry.snapshot();
 
     final client = await _connectNodeHost(
       uri: uri,
@@ -46,13 +48,12 @@ Future<void> main(List<String> arguments) async {
       version: args.option('client-version') ?? _defaultClientVersion,
       identity: identity,
       store: store,
-      commands: commands,
-      caps: caps,
+      snapshot: snapshot,
       approvePairing: args.flag('approve-pairing'),
     );
 
     stdout.writeln(
-      'Connected nodeId=${identity.deviceId} commands=${commands.join(",")} stateFile=${state.file.path}',
+      'Connected nodeId=${identity.deviceId} commands=${snapshot.commands.join(",")} stateFile=$statePath',
     );
 
     final done = Completer<void>();
@@ -64,17 +65,16 @@ Future<void> main(List<String> arguments) async {
       );
     });
 
-    final requestSubscription = client.node.invokeRequests.listen((request) {
-      unawaited(() async {
-        stderr.writeln(
-          'invoke id=${request.id} command=${request.command} nodeId=${request.nodeId}',
-        );
-        await _handleInvoke(client, request);
-        handledRequests += 1;
-        if (args.flag('once') && handledRequests >= 1 && !done.isCompleted) {
-          done.complete();
-        }
-      }());
+    final requestSubscription = registry.attach(client);
+    final handledRequestSubscription =
+        client.node.invokeRequests.listen((request) {
+      stderr.writeln(
+        'invoke id=${request.id} command=${request.command} nodeId=${request.nodeId}',
+      );
+      handledRequests += 1;
+      if (args.flag('once') && handledRequests >= 1 && !done.isCompleted) {
+        done.complete();
+      }
     });
 
     final sigintSubscription = ProcessSignal.sigint.watch().listen((_) {
@@ -94,6 +94,7 @@ Future<void> main(List<String> arguments) async {
     } finally {
       await sigtermSubscription.cancel();
       await sigintSubscription.cancel();
+      await handledRequestSubscription.cancel();
       await requestSubscription.cancel();
       await stateSubscription.cancel();
       await client.close();
@@ -185,8 +186,7 @@ Future<GatewayClient> _connectNodeHost({
   required String version,
   required GatewayEd25519Identity identity,
   required GatewayDeviceTokenStore store,
-  required List<String> commands,
-  required List<String> caps,
+  required GatewayNodeConnectSnapshot snapshot,
   required bool approvePairing,
 }) async {
   while (true) {
@@ -196,8 +196,9 @@ Future<GatewayClient> _connectNodeHost({
         auth: auth,
         role: gatewayNodeRole,
         scopes: const <String>[],
-        caps: caps,
-        commands: commands,
+        caps: snapshot.capabilities,
+        commands: snapshot.commands,
+        permissions: snapshot.permissions,
         autoReconnect: true,
         deviceIdentity: identity,
         deviceTokenStore: store,
@@ -257,79 +258,77 @@ Future<GatewayClient> _connectNodeHost({
   }
 }
 
-Future<void> _handleInvoke(
-  GatewayClient client,
-  GatewayNodeInvokeRequest request,
-) async {
-  switch (request.command) {
+GatewayNodeCapabilityRegistry _buildRegistry({
+  required List<String> commands,
+  required List<String> caps,
+}) {
+  final declaredCapabilities = caps
+      .map((capability) => capability.trim())
+      .where((capability) => capability.isNotEmpty)
+      .map((capability) => GatewayNodeCapability(name: capability))
+      .toList(growable: false);
+
+  final declaredCommands = commands
+      .map((command) => command.trim())
+      .where((command) => command.isNotEmpty)
+      .map(_buildCommand)
+      .toList(growable: false);
+
+  return GatewayNodeCapabilityRegistry(
+    capabilities: declaredCapabilities,
+    commands: declaredCommands,
+  );
+}
+
+GatewayNodeCommand _buildCommand(String command) {
+  switch (command) {
     case 'system.notify':
-      await client.node.sendInvokeResult(
-        id: request.id,
-        nodeId: request.nodeId,
-        ok: true,
-        payload: <String, Object?>{
-          'notified': true,
-          'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
-          'params': request.params,
-        },
+      return GatewayNodeCommand(
+        name: command,
+        handler: (context) async => GatewayNodeCommandResult.ok(
+          payload: <String, Object?>{
+            'notified': true,
+            'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
+            'params': context.params,
+          },
+        ),
       );
-      return;
     case 'camera.list':
-      await client.node.sendInvokeResult(
-        id: request.id,
-        nodeId: request.nodeId,
-        ok: true,
-        payload: <String, Object?>{
-          'cameras': const <Object?>[],
-        },
+      return const GatewayNodeCommand(
+        name: 'camera.list',
+        capabilities: <String>['camera'],
+        handler: _handleCameraList,
       );
-      return;
     case 'ping':
-      await client.node.sendInvokeResult(
-        id: request.id,
-        nodeId: request.nodeId,
-        ok: true,
-        payload: <String, Object?>{
-          'pong': true,
-          'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
-          'params': request.params,
-        },
+      return GatewayNodeCommand(
+        name: command,
+        handler: (context) async => GatewayNodeCommandResult.ok(
+          payload: <String, Object?>{
+            'pong': true,
+            'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
+            'params': context.params,
+          },
+        ),
       );
-      return;
     case 'echo':
-      await client.node.sendInvokeResult(
-        id: request.id,
-        nodeId: request.nodeId,
-        ok: true,
-        payload: <String, Object?>{
-          'echo': request.params,
-          'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
-        },
+      return GatewayNodeCommand(
+        name: command,
+        handler: (context) async => GatewayNodeCommandResult.ok(
+          payload: <String, Object?>{
+            'echo': context.params,
+            'receivedAtMs': DateTime.now().millisecondsSinceEpoch,
+          },
+        ),
       );
-      return;
     case 'fail':
-      await client.node.sendInvokeResult(
-        id: request.id,
-        nodeId: request.nodeId,
-        ok: false,
-        error: const GatewayNodeInvokeError(
-          code: 'forced_failure',
-          message: 'Requested failure from sample node host.',
-        ),
+      return const GatewayNodeCommand(
+        name: 'fail',
+        handler: _handleFail,
       );
-      return;
-    default:
-      await client.node.sendInvokeResult(
-        id: request.id,
-        nodeId: request.nodeId,
-        ok: false,
-        error: GatewayNodeInvokeError(
-          code: 'unsupported_command',
-          message: 'Unsupported command "${request.command}".',
-        ),
-      );
-      return;
   }
+  throw _CliUsageException(
+    'Unsupported sample node command "$command". Use one of: system.notify, camera.list, ping, echo, fail.',
+  );
 }
 
 Uri _readRequiredUri(ArgResults args, Map<String, String> env) {
@@ -440,142 +439,23 @@ void _printUsage(
   );
 }
 
-class _NodeHostState {
-  _NodeHostState._(this.file, this._json);
-
-  static final JsonEncoder _encoder = const JsonEncoder.withIndent('  ');
-
-  static Future<_NodeHostState> open(String path) async {
-    final file = File(path);
-    if (!await file.exists()) {
-      return _NodeHostState._(file, <String, Object?>{});
-    }
-    final decoded = jsonDecode(await file.readAsString());
-    if (decoded is! Map) {
-      throw GatewayProtocolException(
-        'Invalid node host state file: expected a JSON object.',
-      );
-    }
-    return _NodeHostState._(file, Map<String, Object?>.from(decoded));
-  }
-
-  final File file;
-  final Map<String, Object?> _json;
-
-  Future<GatewayEd25519Identity> loadOrCreateIdentity() async {
-    final raw = _json['identity'];
-    if (raw is Map) {
-      return GatewayEd25519Identity.fromData(
-        GatewayEd25519IdentityData.fromJson(Map<String, Object?>.from(raw)),
-      );
-    }
-
-    final identity = await GatewayEd25519Identity.generate();
-    _json['identity'] = (await identity.exportData()).toJson();
-    await persist();
-    return identity;
-  }
-
-  GatewayStoredDeviceToken? readToken({
-    required String deviceId,
-    required String role,
-  }) {
-    final entries = _json['tokens'];
-    if (entries is! List) {
-      return null;
-    }
-    for (final entry in entries) {
-      if (entry is! Map) {
-        continue;
-      }
-      final json = Map<String, Object?>.from(entry);
-      if (json['deviceId'] != deviceId || json['role'] != role) {
-        continue;
-      }
-      return GatewayStoredDeviceToken(
-        deviceId: json['deviceId']! as String,
-        role: json['role']! as String,
-        token: json['token']! as String,
-        scopes: json['scopes'] is List
-            ? List<String>.from(json['scopes']! as List)
-            : const <String>[],
-        issuedAtMs: json['issuedAtMs'] as int?,
-      );
-    }
-    return null;
-  }
-
-  Future<void> writeToken(GatewayStoredDeviceToken token) async {
-    final entries = _mutableTokens()
-      ..removeWhere(
-        (entry) =>
-            entry['deviceId'] == token.deviceId && entry['role'] == token.role,
-      )
-      ..add(<String, Object?>{
-        'deviceId': token.deviceId,
-        'role': token.role,
-        'token': token.token,
-        'scopes': token.scopes,
-        'issuedAtMs': token.issuedAtMs,
-      });
-    _json['tokens'] = entries;
-    await persist();
-  }
-
-  Future<void> deleteToken({
-    required String deviceId,
-    required String role,
-  }) async {
-    final entries = _mutableTokens()
-      ..removeWhere(
-        (entry) => entry['deviceId'] == deviceId && entry['role'] == role,
-      );
-    _json['tokens'] = entries;
-    await persist();
-  }
-
-  Future<void> persist() async {
-    await file.parent.create(recursive: true);
-    await file.writeAsString(_encoder.convert(_json));
-  }
-
-  List<Map<String, Object?>> _mutableTokens() {
-    final entries = _json['tokens'];
-    if (entries is! List) {
-      return <Map<String, Object?>>[];
-    }
-    return entries
-        .whereType<Map>()
-        .map((entry) => Map<String, Object?>.from(entry))
-        .toList(growable: true);
-  }
+Future<GatewayNodeCommandResult> _handleCameraList(
+  GatewayNodeCommandContext context,
+) async {
+  return const GatewayNodeCommandResult.ok(
+    payload: <String, Object?>{
+      'cameras': <Object?>[],
+    },
+  );
 }
 
-class _NodeHostDeviceTokenStore implements GatewayDeviceTokenStore {
-  const _NodeHostDeviceTokenStore(this._state);
-
-  final _NodeHostState _state;
-
-  @override
-  Future<void> delete({
-    required String deviceId,
-    required String role,
-  }) {
-    return _state.deleteToken(deviceId: deviceId, role: role);
-  }
-
-  @override
-  Future<GatewayStoredDeviceToken?> read({
-    required String deviceId,
-    required String role,
-  }) async {
-    return _state.readToken(deviceId: deviceId, role: role);
-  }
-
-  @override
-  Future<void> write(GatewayStoredDeviceToken token) {
-    return _state.writeToken(token);
-  }
+Future<GatewayNodeCommandResult> _handleFail(
+  GatewayNodeCommandContext context,
+) async {
+  return GatewayNodeCommandResult.error(
+    code: 'forced_failure',
+    message: 'Requested failure from sample node host.',
+  );
 }
 
 class _CliUsageException implements Exception {

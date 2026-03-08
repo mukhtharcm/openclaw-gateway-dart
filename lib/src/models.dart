@@ -117,6 +117,55 @@ class GatewayConnectOptions {
     );
   }
 
+  /// Builds node-style connect options using the default node role and no scopes.
+  factory GatewayConnectOptions.forNode({
+    required Uri uri,
+    required GatewayAuth auth,
+    required GatewayClientInfo clientInfo,
+    List<String>? caps,
+    List<String>? commands,
+    Map<String, bool>? permissions,
+    String? pathEnv,
+    String? locale,
+    String? userAgent,
+    GatewayDeviceIdentity? deviceIdentity,
+    GatewayDeviceTokenStore? deviceTokenStore,
+    Duration connectChallengeTimeout = const Duration(seconds: 6),
+    Duration connectResponseTimeout = const Duration(seconds: 12),
+    Duration requestTimeout = const Duration(seconds: 15),
+    bool autoReconnect = false,
+    Duration reconnectInitialDelay = const Duration(milliseconds: 500),
+    Duration reconnectMaxDelay = const Duration(seconds: 30),
+    bool tickWatchEnabled = true,
+    Duration tickWatchMinimumCheckInterval = const Duration(seconds: 1),
+    int tickWatchMissedIntervals = 2,
+  }) {
+    return GatewayConnectOptions(
+      uri: uri,
+      auth: auth,
+      clientInfo: clientInfo,
+      role: gatewayNodeRole,
+      scopes: const <String>[],
+      caps: caps,
+      commands: commands,
+      permissions: permissions,
+      pathEnv: pathEnv,
+      locale: locale,
+      userAgent: userAgent,
+      deviceIdentity: deviceIdentity,
+      deviceTokenStore: deviceTokenStore,
+      connectChallengeTimeout: connectChallengeTimeout,
+      connectResponseTimeout: connectResponseTimeout,
+      requestTimeout: requestTimeout,
+      autoReconnect: autoReconnect,
+      reconnectInitialDelay: reconnectInitialDelay,
+      reconnectMaxDelay: reconnectMaxDelay,
+      tickWatchEnabled: tickWatchEnabled,
+      tickWatchMinimumCheckInterval: tickWatchMinimumCheckInterval,
+      tickWatchMissedIntervals: tickWatchMissedIntervals,
+    );
+  }
+
   final Uri uri;
   final GatewayAuth auth;
   final GatewayClientInfo clientInfo;
