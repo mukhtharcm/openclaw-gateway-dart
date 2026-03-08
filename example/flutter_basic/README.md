@@ -1,7 +1,9 @@
 # OpenClaw Gateway Flutter Example
 
 This example is a small Flutter app that connects to an OpenClaw gateway and
-acts like a compact gateway workbench. It lets you:
+acts like a compact gateway workbench. On desktop it now uses a dedicated
+workspace layout with a sidebar and multi-pane content instead of a simple
+stacked mobile-style page. It lets you:
 
 - connect with a gateway URL and shared token
 - inspect gateway metadata, health, usage, cron, and voice wake status
