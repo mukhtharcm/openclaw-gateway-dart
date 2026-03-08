@@ -47,10 +47,10 @@ void main() {
       uri: Uri.parse('wss://gateway.example'),
       auth: const GatewayAuth.none(),
       clientInfo: const GatewayClientInfo(
-        id: 'openclaw-dart',
+        id: 'gateway-client',
         version: '0.1.0',
         platform: 'dart',
-        mode: 'automation',
+        mode: 'backend',
       ),
     );
 

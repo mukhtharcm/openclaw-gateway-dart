@@ -55,6 +55,12 @@ class GatewayConnectOptions {
     this.connectChallengeTimeout = const Duration(seconds: 6),
     this.connectResponseTimeout = const Duration(seconds: 12),
     this.requestTimeout = const Duration(seconds: 15),
+    this.autoReconnect = false,
+    this.reconnectInitialDelay = const Duration(milliseconds: 500),
+    this.reconnectMaxDelay = const Duration(seconds: 30),
+    this.tickWatchEnabled = true,
+    this.tickWatchMinimumCheckInterval = const Duration(seconds: 1),
+    this.tickWatchMissedIntervals = 2,
   })  : scopes = List.unmodifiable(scopes ?? defaultOperatorScopes),
         caps = List.unmodifiable(caps ?? const <String>[]),
         commands = List.unmodifiable(commands ?? const <String>[]),
@@ -72,6 +78,12 @@ class GatewayConnectOptions {
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
+    bool autoReconnect = false,
+    Duration reconnectInitialDelay = const Duration(milliseconds: 500),
+    Duration reconnectMaxDelay = const Duration(seconds: 30),
+    bool tickWatchEnabled = true,
+    Duration tickWatchMinimumCheckInterval = const Duration(seconds: 1),
+    int tickWatchMissedIntervals = 2,
   }) {
     return GatewayConnectOptions(
       uri: uri,
@@ -85,6 +97,12 @@ class GatewayConnectOptions {
       connectChallengeTimeout: connectChallengeTimeout,
       connectResponseTimeout: connectResponseTimeout,
       requestTimeout: requestTimeout,
+      autoReconnect: autoReconnect,
+      reconnectInitialDelay: reconnectInitialDelay,
+      reconnectMaxDelay: reconnectMaxDelay,
+      tickWatchEnabled: tickWatchEnabled,
+      tickWatchMinimumCheckInterval: tickWatchMinimumCheckInterval,
+      tickWatchMissedIntervals: tickWatchMissedIntervals,
     );
   }
 
@@ -101,6 +119,12 @@ class GatewayConnectOptions {
   final Duration connectChallengeTimeout;
   final Duration connectResponseTimeout;
   final Duration requestTimeout;
+  final bool autoReconnect;
+  final Duration reconnectInitialDelay;
+  final Duration reconnectMaxDelay;
+  final bool tickWatchEnabled;
+  final Duration tickWatchMinimumCheckInterval;
+  final int tickWatchMissedIntervals;
 
   /// Serializes the `connect` request parameters.
   JsonMap toConnectParams() {
@@ -118,6 +142,33 @@ class GatewayConnectOptions {
       'userAgent': userAgent,
     });
   }
+}
+
+/// High-level lifecycle phases for the gateway socket.
+enum GatewayConnectionPhase {
+  disconnected,
+  connecting,
+  connected,
+  reconnecting,
+  closed,
+}
+
+/// Current lifecycle state for a [GatewayClient] connection.
+class GatewayConnectionState {
+  const GatewayConnectionState({
+    required this.phase,
+    this.attempt = 0,
+    this.error,
+    this.hello,
+  });
+
+  final GatewayConnectionPhase phase;
+  final int attempt;
+  final GatewayException? error;
+  final GatewayHelloOk? hello;
+
+  /// Whether the gateway handshake is currently complete.
+  bool get isConnected => phase == GatewayConnectionPhase.connected;
 }
 
 /// Gateway server metadata returned in the `hello-ok` payload.

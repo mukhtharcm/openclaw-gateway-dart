@@ -13,6 +13,7 @@ WebSocket code.
 - token or password authentication
 - request/response gateway methods
 - listening to gateway events
+- reconnect/backoff and lifecycle state
 - operator-side app flows such as:
   - health/status views
   - session lists
@@ -22,7 +23,6 @@ WebSocket code.
 ## What Is Not Included Yet
 
 - gateway discovery
-- reconnect/backoff
 - secure storage helpers
 - TLS pinning or TOFU helpers
 - device pairing and device identity flows
@@ -37,8 +37,9 @@ Future<GatewayClient> connectGateway() {
   return GatewayClient.connect(
     uri: Uri.parse('ws://127.0.0.1:18789'),
     auth: const GatewayAuth.token('gateway-shared-token'),
+    autoReconnect: true,
     clientInfo: const GatewayClientInfo(
-      id: 'flutter-app',
+      id: 'gateway-client',
       version: '0.1.0',
       platform: 'flutter',
       mode: 'ui',
@@ -56,6 +57,14 @@ Stream<GatewayEventFrame> chatEvents(GatewayClient client) {
 }
 ```
 
+## Tracking Connection State
+
+```dart
+Stream<GatewayConnectionState> connectionStates(GatewayClient client) {
+  return client.connectionStates;
+}
+```
+
 ## Suggested App Architecture
 
 - create one long-lived `GatewayClient`
@@ -70,7 +79,6 @@ For a production Flutter app, you will probably want a small app-local wrapper
 on top of this package for:
 
 - secret storage
-- reconnect policy
 - app lifecycle integration
 - user-facing connection state
 - mapping raw chat events into UI state

@@ -24,7 +24,7 @@ Future<void> main() async {
     uri: Uri.parse(rawUrl),
     auth: auth,
     clientInfo: const GatewayClientInfo(
-      id: 'example',
+      id: 'gateway-client',
       version: '0.1.0',
       platform: 'dart',
       mode: 'backend',

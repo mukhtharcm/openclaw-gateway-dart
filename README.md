@@ -57,8 +57,9 @@ Future<void> main() async {
   final client = await GatewayClient.connect(
     uri: Uri.parse('ws://127.0.0.1:18789'),
     auth: const GatewayAuth.token('gateway-shared-token'),
+    autoReconnect: true,
     clientInfo: const GatewayClientInfo(
-      id: 'my-app',
+      id: 'gateway-client',
       version: '0.1.0',
       platform: 'dart',
       mode: 'backend',
@@ -90,8 +91,9 @@ Future<GatewayClient> openGateway() {
   return GatewayClient.connect(
     uri: Uri.parse('ws://127.0.0.1:18789'),
     auth: const GatewayAuth.token('gateway-shared-token'),
+    autoReconnect: true,
     clientInfo: const GatewayClientInfo(
-      id: 'flutter-app',
+      id: 'gateway-client',
       version: '0.1.0',
       platform: 'flutter',
       mode: 'ui',
@@ -120,6 +122,10 @@ class GatewayEventsView extends StatelessWidget {
   }
 }
 ```
+
+`autoReconnect` re-establishes the socket after disconnects and tick timeouts.
+Use `client.connectionStates` to drive UI or logging for transitions such as
+`connecting`, `connected`, `reconnecting`, and `closed`.
 
 More docs:
 
@@ -159,11 +165,16 @@ echo '{"probe":true}' | dart run openclaw_gateway:openclaw_gateway_cli raw healt
 the `chat` event stream. The `chat-watch` command wraps that pattern and waits
 for the final chat event.
 
+The gateway validates `client.id` and `client.mode` against a fixed allowlist.
+For generic Dart and Flutter apps, `gateway-client` is the safest library
+default and `cli` is the safest CLI default.
+
 ## API Overview
 
 - `GatewayClient`
   - owns the WebSocket connection
   - exposes raw request helpers and event streams
+  - exposes `connectionStates` for lifecycle tracking
 - `GatewayOperatorClient`
   - typed helpers for common operator methods
 - `GatewayAuth`

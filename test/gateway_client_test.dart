@@ -119,6 +119,113 @@ void main() {
         throwsA(isA<GatewayTimeoutException>()),
       );
     });
+
+    test('auto reconnects after socket close and future requests wait for it',
+        () async {
+      final first = FakeWebSocketChannel();
+      final second = FakeWebSocketChannel();
+      final channels = Queue<FakeWebSocketChannel>.from([first, second]);
+      unawaited(_completeSuccessfulHandshake(first, connId: 'conn-1'));
+
+      final client = await _connectClientWithFactory(
+        channelFactory: (_) {
+          expect(channels, isNotEmpty);
+          return channels.removeFirst();
+        },
+        autoReconnect: true,
+        reconnectInitialDelay: Duration.zero,
+        reconnectMaxDelay: Duration.zero,
+      );
+
+      final phases = <GatewayConnectionPhase>[];
+      final sub = client.connectionStates.listen((state) {
+        phases.add(state.phase);
+      });
+
+      await first.closeFromServer(1006, 'closed by test');
+
+      final healthFuture = client.operator.health();
+      second.sendJson({
+        'type': 'event',
+        'event': 'connect.challenge',
+        'payload': {
+          'nonce': 'reconnect-nonce',
+          'protocol': 3,
+        },
+      });
+      final reconnectRequest = await second.nextClientJson();
+      expect(reconnectRequest['method'], 'connect');
+      second.sendJson({
+        'type': 'res',
+        'id': reconnectRequest['id'],
+        'ok': true,
+        'payload': _helloPayload(connId: 'conn-2', tickIntervalMs: 1000),
+      });
+
+      final healthRequest = await second.nextClientJson();
+      expect(healthRequest['method'], 'health');
+      second.sendJson({
+        'type': 'res',
+        'id': healthRequest['id'],
+        'ok': true,
+        'payload': {'status': 'ok'},
+      });
+
+      await expectLater(healthFuture, completion({'status': 'ok'}));
+      await _eventually(
+        () => client.isReady && client.hello.server.connId == 'conn-2',
+      );
+      expect(phases, contains(GatewayConnectionPhase.reconnecting));
+
+      await sub.cancel();
+      await client.close();
+    });
+
+    test('reconnects when ticks stop arriving', () async {
+      final first = FakeWebSocketChannel();
+      final second = FakeWebSocketChannel();
+      final channels = Queue<FakeWebSocketChannel>.from([first, second]);
+      unawaited(
+        _completeSuccessfulHandshake(first,
+            connId: 'conn-1', tickIntervalMs: 20),
+      );
+
+      final client = await _connectClientWithFactory(
+        channelFactory: (_) {
+          expect(channels, isNotEmpty);
+          return channels.removeFirst();
+        },
+        autoReconnect: true,
+        reconnectInitialDelay: Duration.zero,
+        reconnectMaxDelay: Duration.zero,
+        tickWatchMinimumCheckInterval: const Duration(milliseconds: 5),
+      );
+
+      second.sendJson({
+        'type': 'event',
+        'event': 'connect.challenge',
+        'payload': {
+          'nonce': 'reconnect-nonce',
+          'protocol': 3,
+        },
+      });
+      final reconnectRequest =
+          await second.nextClientJson().timeout(const Duration(seconds: 1));
+      expect(reconnectRequest['method'], 'connect');
+      second.sendJson({
+        'type': 'res',
+        'id': reconnectRequest['id'],
+        'ok': true,
+        'payload': _helloPayload(connId: 'conn-2', tickIntervalMs: 20),
+      });
+
+      await _eventually(
+        () => client.isReady && client.hello.server.connId == 'conn-2',
+        timeout: const Duration(seconds: 1),
+      );
+
+      await client.close();
+    });
   });
 }
 
@@ -127,27 +234,58 @@ Future<GatewayClient> _connectClient(
   Duration connectChallengeTimeout = const Duration(milliseconds: 100),
   Duration connectResponseTimeout = const Duration(milliseconds: 100),
   Duration requestTimeout = const Duration(milliseconds: 100),
+  bool autoReconnect = false,
+  Duration reconnectInitialDelay = const Duration(milliseconds: 1),
+  Duration reconnectMaxDelay = const Duration(milliseconds: 10),
+  Duration tickWatchMinimumCheckInterval = const Duration(milliseconds: 10),
+}) {
+  return _connectClientWithFactory(
+    channelFactory: (_) => channel,
+    connectChallengeTimeout: connectChallengeTimeout,
+    connectResponseTimeout: connectResponseTimeout,
+    requestTimeout: requestTimeout,
+    autoReconnect: autoReconnect,
+    reconnectInitialDelay: reconnectInitialDelay,
+    reconnectMaxDelay: reconnectMaxDelay,
+    tickWatchMinimumCheckInterval: tickWatchMinimumCheckInterval,
+  );
+}
+
+Future<GatewayClient> _connectClientWithFactory({
+  required GatewayChannelFactory channelFactory,
+  Duration connectChallengeTimeout = const Duration(milliseconds: 100),
+  Duration connectResponseTimeout = const Duration(milliseconds: 100),
+  Duration requestTimeout = const Duration(milliseconds: 100),
+  bool autoReconnect = false,
+  Duration reconnectInitialDelay = const Duration(milliseconds: 1),
+  Duration reconnectMaxDelay = const Duration(milliseconds: 10),
+  Duration tickWatchMinimumCheckInterval = const Duration(milliseconds: 10),
 }) {
   return GatewayClient.connect(
     uri: Uri.parse('ws://gateway.test'),
     auth: const GatewayAuth.token('shared-token'),
     clientInfo: const GatewayClientInfo(
-      id: 'openclaw-dart-test',
+      id: 'gateway-client',
       version: '0.1.0',
       platform: 'dart',
-      mode: 'automation',
+      mode: 'backend',
       displayName: 'OpenClaw Dart Test',
     ),
     connectChallengeTimeout: connectChallengeTimeout,
     connectResponseTimeout: connectResponseTimeout,
     requestTimeout: requestTimeout,
-    channelFactory: (_) => channel,
+    autoReconnect: autoReconnect,
+    reconnectInitialDelay: reconnectInitialDelay,
+    reconnectMaxDelay: reconnectMaxDelay,
+    tickWatchMinimumCheckInterval: tickWatchMinimumCheckInterval,
+    channelFactory: channelFactory,
   );
 }
 
 Future<void> _completeSuccessfulHandshake(
   FakeWebSocketChannel channel, {
   String connId = 'conn-test',
+  int tickIntervalMs = 30000,
 }) async {
   await Future<void>.delayed(Duration.zero);
   channel.sendJson({
@@ -171,12 +309,13 @@ Future<void> _completeSuccessfulHandshake(
     'type': 'res',
     'id': connectRequest['id'],
     'ok': true,
-    'payload': _helloPayload(connId: connId),
+    'payload': _helloPayload(connId: connId, tickIntervalMs: tickIntervalMs),
   });
 }
 
 Map<String, Object?> _helloPayload({
   required String connId,
+  int tickIntervalMs = 30000,
 }) {
   return {
     'type': 'hello-ok',
@@ -195,9 +334,24 @@ Map<String, Object?> _helloPayload({
     'policy': {
       'maxPayload': 1000,
       'maxBufferedBytes': 2000,
-      'tickIntervalMs': 30000,
+      'tickIntervalMs': tickIntervalMs,
     },
   };
+}
+
+Future<void> _eventually(
+  bool Function() predicate, {
+  Duration timeout = const Duration(milliseconds: 500),
+  Duration interval = const Duration(milliseconds: 10),
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    if (predicate()) {
+      return;
+    }
+    await Future<void>.delayed(interval);
+  }
+  expect(predicate(), isTrue, reason: 'Condition did not become true in time.');
 }
 
 class FakeWebSocketChannel extends StreamChannelMixin<Object?>
@@ -253,6 +407,10 @@ class FakeWebSocketChannel extends StreamChannelMixin<Object?>
 
   void sendJson(Object value) {
     _incoming.add(jsonEncode(value));
+  }
+
+  Future<void> closeFromServer([int? code, String? reason]) {
+    return _close(code, reason);
   }
 
   Future<Object?> _nextClientMessage() {

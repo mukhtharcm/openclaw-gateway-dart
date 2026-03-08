@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Added auto reconnect, connection lifecycle state streaming, and tick timeout
+  detection to `GatewayClient`.
+- Added reconnect-focused client tests and updated docs for app and Flutter
+  usage.
+
 ## 0.1.0
 
 - Initial public release.
