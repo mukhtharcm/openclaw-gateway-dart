@@ -23,6 +23,7 @@ dependencies:
 
 executables:
   openclaw-gateway: openclaw_gateway_cli
+  openclaw-gateway-node-host: openclaw_gateway_node_host
 
 dev_dependencies:
   lints: ^5.0.0

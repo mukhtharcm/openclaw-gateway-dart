@@ -12,8 +12,11 @@
 - Added dedicated operator-side node and device clients plus node-role helpers
   for `node.invoke.request`, `node.invoke.result`, `node.event`, and canvas
   capability refresh.
+- Added typed CLI helpers for `nodes-list`, `node-describe`, and `node-invoke`,
+  plus a dedicated sample node-host executable with persisted identity/token
+  state and optional pairing approval.
 - Expanded tests, examples, and docs for app, Flutter, device-auth, and
-  node-mode usage.
+  node-mode usage, including a live end-to-end `node.invoke` smoke test.
 
 ## 0.1.0
 

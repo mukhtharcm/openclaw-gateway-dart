@@ -16,8 +16,8 @@ Future<void> runNodeCommand(GatewayClient client) async {
 
   final result = await client.nodes.invoke(
     nodeId: first.nodeId,
-    command: 'camera.capture',
-    params: {'quality': 'high'},
+    command: 'system.notify',
+    params: {'title': 'Hello', 'body': 'From Dart'},
   );
 
   print(result.payload);
@@ -44,12 +44,12 @@ import 'package:openclaw_gateway/openclaw_gateway.dart';
 
 Future<void> runNodeSession(GatewayClient client) async {
   await for (final request in client.node.invokeRequests) {
-    if (request.command == 'ping') {
+    if (request.command == 'system.notify') {
       await client.node.sendInvokeResult(
         id: request.id,
         nodeId: request.nodeId,
         ok: true,
-        payload: {'pong': true},
+        payload: {'notified': true},
       );
       continue;
     }
@@ -73,6 +73,20 @@ Node-role helpers:
 - `client.node.sendInvokeResult(...)`
 - `client.node.sendEvent(...)`
 - `client.node.refreshCanvasCapability()`
+
+## Sample Node Host
+
+The package also ships with a runnable sample node host:
+
+```sh
+dart run openclaw_gateway:openclaw_gateway_node_host \
+  --url 'ws://127.0.0.1:18789' \
+  --token 'gateway-shared-token' \
+  --approve-pairing
+```
+
+Use `client.nodes.invoke(...)` or the main CLI's `node-invoke` command to send
+requests to that sample node.
 
 ## Device Auth
 

@@ -185,7 +185,8 @@ Operator-side node management:
 final nodes = await client.nodes.list();
 final result = await client.nodes.invoke(
   nodeId: nodes.first.nodeId,
-  command: 'ping',
+  command: 'system.notify',
+  params: {'title': 'Hello', 'body': 'From Dart'},
 );
 ```
 
@@ -193,13 +194,24 @@ Node-role runtime handling:
 
 ```dart
 await for (final request in client.node.invokeRequests) {
-  await client.node.sendInvokeResult(
-    id: request.id,
-    nodeId: request.nodeId,
-    ok: true,
-    payload: {'handled': true},
-  );
+  if (request.command == 'system.notify') {
+    await client.node.sendInvokeResult(
+      id: request.id,
+      nodeId: request.nodeId,
+      ok: true,
+      payload: {'notified': true},
+    );
+  }
 }
+```
+
+For a runnable sample node host, use the dedicated executable:
+
+```sh
+dart run openclaw_gateway:openclaw_gateway_node_host \
+  --url 'ws://127.0.0.1:18789' \
+  --token 'gateway-shared-token' \
+  --approve-pairing
 ```
 
 ## Sample CLI
@@ -226,8 +238,17 @@ dart run openclaw_gateway:openclaw_gateway_cli sessions-list --limit 10
 dart run openclaw_gateway:openclaw_gateway_cli chat-history main --limit 20
 dart run openclaw_gateway:openclaw_gateway_cli chat-send main "hello from dart"
 dart run openclaw_gateway:openclaw_gateway_cli chat-watch main "hello from dart"
+dart run openclaw_gateway:openclaw_gateway_cli nodes-list
+dart run openclaw_gateway:openclaw_gateway_cli node-describe <node-id>
+dart run openclaw_gateway:openclaw_gateway_cli node-invoke <node-id> system.notify --params '{"title":"Hello","body":"From Dart"}'
 dart run openclaw_gateway:openclaw_gateway_cli events --name chat
 echo '{"probe":true}' | dart run openclaw_gateway:openclaw_gateway_cli raw health
+```
+
+There is also a dedicated sample node-host executable:
+
+```sh
+dart run openclaw_gateway:openclaw_gateway_node_host --help
 ```
 
 `chat.send` returns an acknowledgement payload such as
@@ -279,7 +300,8 @@ dart pub publish --dry-run
 ## Live Gateway Smoke Test
 
 The repo includes an opt-in live integration test that exercises the typed
-client against a running gateway, including device-token reuse.
+client against a running gateway, including device-token reuse and an
+end-to-end `node.invoke` round-trip with a temporary Dart node client.
 
 ```sh
 OPENCLAW_GATEWAY_LIVE_TEST=1 \

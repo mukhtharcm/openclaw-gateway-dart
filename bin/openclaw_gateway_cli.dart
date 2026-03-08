@@ -243,6 +243,36 @@ ArgParser _buildParser() {
       ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.'),
   );
   parser.addCommand(
+    'nodes-list',
+    ArgParser()
+      ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.'),
+  );
+  parser.addCommand(
+    'node-describe',
+    ArgParser()
+      ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.'),
+  );
+  parser.addCommand(
+    'node-invoke',
+    ArgParser()
+      ..addOption(
+        'params',
+        valueHelp: '\'{"key":"value"}\'',
+        help: 'Inline JSON params for the node command.',
+      )
+      ..addOption(
+        'timeout-ms',
+        valueHelp: 'n',
+        help: 'Optional invoke timeout in ms.',
+      )
+      ..addOption(
+        'idempotency-key',
+        valueHelp: 'key',
+        help: 'Override the generated idempotency key.',
+      )
+      ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.'),
+  );
+  parser.addCommand(
     'events',
     ArgParser()
       ..addOption('name',
@@ -368,6 +398,41 @@ Future<void> _runRpcCommand(ArgResults globalArgs, ArgResults command) async {
           await client.operator.chatAbort(
             sessionKey: command.rest.first,
             runId: _readOptionalString(command, 'run-id'),
+          ),
+        );
+        return;
+      case 'nodes-list':
+        output.writeJson({
+          'nodes': (await client.nodes.list())
+              .map(_nodeSummaryToJson)
+              .toList(growable: false),
+        });
+        return;
+      case 'node-describe':
+        if (command.rest.isEmpty) {
+          throw const _CliUsageException('node-describe requires a node id.');
+        }
+        output.writeJson(
+          _nodeSummaryToJson(
+            await client.nodes.describe(nodeId: command.rest.first),
+          ),
+        );
+        return;
+      case 'node-invoke':
+        if (command.rest.length < 2) {
+          throw const _CliUsageException(
+            'node-invoke requires a node id and command.',
+          );
+        }
+        output.writeJson(
+          _nodeInvokeResultToJson(
+            await client.nodes.invoke(
+              nodeId: command.rest.first,
+              command: command.rest[1],
+              params: await _readOptionalJsonInput(command, 'params'),
+              timeoutMs: _readIntOption(command, 'timeout-ms'),
+              idempotencyKey: _readOptionalString(command, 'idempotency-key'),
+            ),
           ),
         );
         return;
@@ -694,6 +759,12 @@ void _printUsage(
     '  dart run openclaw_gateway:openclaw_gateway_cli chat-watch main "hello"',
   );
   sink.writeln(
+    '  dart run openclaw_gateway:openclaw_gateway_cli nodes-list',
+  );
+  sink.writeln(
+    '  dart run openclaw_gateway:openclaw_gateway_cli node-invoke <node-id> system.notify --params \'{"title":"Hello","body":"From Dart"}\'',
+  );
+  sink.writeln(
     '  echo \'{"probe":true}\' | dart run openclaw_gateway:openclaw_gateway_cli raw health',
   );
 }
@@ -739,6 +810,16 @@ void _printCommandUsage(ArgParser parser, String commandName, IOSink sink) {
       break;
     case 'chat-abort':
       sink.writeln('  ... chat-abort <session-key> [--run-id id]');
+      break;
+    case 'nodes-list':
+      sink.writeln('  ... nodes-list');
+      break;
+    case 'node-describe':
+      sink.writeln('  ... node-describe <node-id>');
+      break;
+    case 'node-invoke':
+      sink.writeln(
+          '  ... node-invoke <node-id> <command> [--params \'{"key":"value"}\']');
       break;
     case 'events':
       sink.writeln('  ... events [--name chat]');
@@ -813,6 +894,37 @@ String? _extractChatMessageText(Object? value) {
     return null;
   }
   return parts.join('\n');
+}
+
+Map<String, Object?> _nodeSummaryToJson(GatewayNodeSummary node) {
+  return <String, Object?>{
+    'nodeId': node.nodeId,
+    'displayName': node.displayName,
+    'platform': node.platform,
+    'version': node.version,
+    'coreVersion': node.coreVersion,
+    'uiVersion': node.uiVersion,
+    'deviceFamily': node.deviceFamily,
+    'modelIdentifier': node.modelIdentifier,
+    'remoteIp': node.remoteIp,
+    'caps': node.caps,
+    'commands': node.commands,
+    'pathEnv': node.pathEnv,
+    'permissions': node.permissions,
+    'connectedAtMs': node.connectedAtMs,
+    'paired': node.paired,
+    'connected': node.connected,
+  };
+}
+
+Map<String, Object?> _nodeInvokeResultToJson(GatewayNodeInvokeResult result) {
+  return <String, Object?>{
+    'ok': result.ok,
+    'nodeId': result.nodeId,
+    'command': result.command,
+    'payload': result.payload,
+    'payloadJSON': result.payloadJson,
+  };
 }
 
 class _StreamingTextPrinter {
