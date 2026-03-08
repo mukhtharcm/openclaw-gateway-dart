@@ -20,29 +20,37 @@ Included today:
 
 - pure Dart gateway client
 - `connect.challenge` plus `connect` handshake
+- reconnect/backoff plus lifecycle state tracking
 - request/response RPC helpers
 - event streams and incoming server request streams
-- operator-oriented helpers for:
-  - `health`
-  - `status`
-  - `config.get`
-  - `sessions.list`
-  - `sessions.preview`
-  - `chat.history`
-  - `chat.send`
-  - `chat.abort`
+- Ed25519 device identities
+- device-token persistence and reuse
+- operator-oriented helpers for channels, config, sessions, chat, models, tools, agents, voice wake, and cron
+- operator-side node and device helpers
+- node-role helpers for invoke requests, invoke results, node events, and canvas capability refresh
 - sample CLI executable for local testing
 
 Not included yet:
 
-- reconnect/backoff
 - gateway discovery
 - TLS pinning / TOFU helpers
 - secure storage adapters
-- device identity signing or pairing helpers
-- node-mode client helpers
+- generated protocol models from the upstream TypeScript schema
 
 ## Install
+
+The package is not on pub.dev yet.
+
+Use a Git dependency for now:
+
+```yaml
+dependencies:
+  openclaw_gateway:
+    git:
+      url: https://github.com/mukhtharcm/openclaw-gateway-dart.git
+```
+
+After the package is published, the install command will be:
 
 ```sh
 dart pub add openclaw_gateway
@@ -139,6 +147,11 @@ More docs:
 The package can sign gateway `connect` requests with an Ed25519 device
 identity and reuse/persist role-scoped device tokens.
 
+For a brand new identity, the gateway will typically require pairing first.
+After that pairing is approved, later `hello-ok` responses include a
+role-scoped device token, and subsequent reconnects can reuse it through
+`GatewayDeviceTokenStore`.
+
 ```dart
 final identity = await GatewayEd25519Identity.generate();
 final tokens = GatewayMemoryDeviceTokenStore();
@@ -161,6 +174,8 @@ final client = await GatewayClient.connect(
 
 `GatewayMemoryDeviceTokenStore` is only a starter implementation. Real apps
 should back `GatewayDeviceTokenStore` with secure or persistent storage.
+Use `client.devices.pairList()`, `client.devices.pairApprove(...)`, and
+`client.devices.pairReject(...)` to build the operator-side pairing flow.
 
 ## Node APIs
 
@@ -220,6 +235,10 @@ echo '{"probe":true}' | dart run openclaw_gateway:openclaw_gateway_cli raw healt
 the `chat` event stream. The `chat-watch` command wraps that pattern and waits
 for the final chat event.
 
+The CLI is intentionally narrower than the library. For gateway methods that do
+not have a dedicated CLI command yet, use `raw` or integrate through the Dart
+API directly.
+
 The gateway validates `client.id` and `client.mode` against a fixed allowlist.
 For generic Dart and Flutter apps, `gateway-client` is the safest library
 default and `cli` is the safest CLI default.
@@ -256,6 +275,20 @@ dart analyze
 dart test
 dart pub publish --dry-run
 ```
+
+## Live Gateway Smoke Test
+
+The repo includes an opt-in live integration test that exercises the typed
+client against a running gateway, including device-token reuse.
+
+```sh
+OPENCLAW_GATEWAY_LIVE_TEST=1 \
+OPENCLAW_GATEWAY_URL='ws://127.0.0.1:18789' \
+OPENCLAW_GATEWAY_TOKEN='gateway-shared-token' \
+dart test test/live_gateway_test.dart
+```
+
+This is skipped by default and is safe to leave in the normal test suite.
 
 ## Security
 

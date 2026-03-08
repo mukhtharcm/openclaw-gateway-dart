@@ -7,6 +7,9 @@
 - persist the `hello-ok.auth.deviceToken` returned by the gateway
 - clear stale stored tokens when the gateway rejects device-token auth
 
+For a new device identity, expect the gateway to require pairing first. Once
+that pairing is approved, later reconnects can rely on the cached device token.
+
 ## Basic Setup
 
 ```dart
@@ -18,7 +21,7 @@ Future<GatewayClient> connectWithDeviceAuth(Uri uri) async {
 
   return GatewayClient.connect(
     uri: uri,
-    auth: const GatewayAuth.none(),
+    auth: const GatewayAuth.token('gateway-shared-token'),
     deviceIdentity: identity,
     deviceTokenStore: tokens,
     clientInfo: const GatewayClientInfo(
@@ -32,6 +35,27 @@ Future<GatewayClient> connectWithDeviceAuth(Uri uri) async {
   );
 }
 ```
+
+After the first pairing is approved and a device token has been cached, later
+reconnects can switch to `GatewayAuth.none()` and let `GatewayDeviceTokenStore`
+provide the role-scoped device token automatically.
+
+## Pairing Flow
+
+The SDK exposes the operator-side pairing methods you need for this:
+
+- `client.devices.pairList()`
+- `client.devices.pairApprove(requestId: ...)`
+- `client.devices.pairReject(requestId: ...)`
+- `client.devices.pairRemove(deviceId: ...)`
+
+Typical flow:
+
+1. connect with a shared token and a new device identity
+2. receive a `NOT_PAIRED` / `PAIRING_REQUIRED` response from the gateway
+3. approve that request from an operator session
+4. reconnect with the same identity
+5. persist the returned device token for future reconnects
 
 ## Persisting Identity And Tokens
 
