@@ -65,12 +65,26 @@ Future<void> main(List<String> arguments) async {
     _printCommandUsage(parser, command.name!, stderr);
     exitCode = 64;
   } on GatewayException catch (error) {
-    stderr.writeln(error.toString());
+    stderr.writeln(_describeGatewayException(error));
     exitCode = 1;
   } on FormatException catch (error) {
     stderr.writeln(error.message);
     exitCode = 64;
   }
+}
+
+String _describeGatewayException(GatewayException error) {
+  final parts = <String>[error.toString()];
+  Object? cause = error.cause;
+  while (cause != null) {
+    parts.add('caused by: $cause');
+    if (cause is GatewayException) {
+      cause = cause.cause;
+    } else {
+      break;
+    }
+  }
+  return parts.join('\n');
 }
 
 ArgParser _buildParser() {
