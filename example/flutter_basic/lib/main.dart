@@ -116,7 +116,7 @@ class _GatewayExampleHomePageState extends State<GatewayExampleHomePage> {
           _connectionState = state;
         });
         if (state.error != null) {
-          _appendLog('connection error: ${state.error}');
+          _appendLog('connection error: ${_describeError(state.error!)}');
         }
       });
 
@@ -148,7 +148,7 @@ class _GatewayExampleHomePageState extends State<GatewayExampleHomePage> {
       _appendLog('connected to gateway ${client.hello.server.version}');
       await _refresh();
     } catch (error) {
-      _setError(error.toString());
+      _setError(_describeUnknownError(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -211,7 +211,7 @@ class _GatewayExampleHomePageState extends State<GatewayExampleHomePage> {
       });
       await _loadHistory();
     } catch (error) {
-      _setError(error.toString());
+      _setError(_describeUnknownError(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -278,7 +278,7 @@ class _GatewayExampleHomePageState extends State<GatewayExampleHomePage> {
         _promptController.clear();
       }
     } catch (error) {
-      _setError(error.toString());
+      _setError(_describeUnknownError(error));
     } finally {
       if (mounted) {
         setState(() {
@@ -309,6 +309,27 @@ class _GatewayExampleHomePageState extends State<GatewayExampleHomePage> {
       _errorText = message;
     });
     _appendLog('error: $message');
+  }
+
+  String _describeUnknownError(Object error) {
+    if (error is GatewayException) {
+      return _describeError(error);
+    }
+    return error.toString();
+  }
+
+  String _describeError(GatewayException error) {
+    final parts = <String>[error.toString()];
+    Object? cause = error.cause;
+    while (cause != null) {
+      parts.add('caused by: $cause');
+      if (cause is GatewayException) {
+        cause = cause.cause;
+      } else {
+        break;
+      }
+    }
+    return parts.join('\n');
   }
 
   String _pretty(Object? value) {
