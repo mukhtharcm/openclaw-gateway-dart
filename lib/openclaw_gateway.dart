@@ -28,3 +28,4 @@ export 'src/protocol.dart'
         gatewayNodeRole,
         gatewayOperatorRole,
         gatewayProtocolVersion;
+export 'src/storage.dart';

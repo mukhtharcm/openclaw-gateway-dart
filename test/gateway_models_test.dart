@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:openclaw_gateway/openclaw_gateway.dart';
+import 'package:openclaw_gateway/openclaw_gateway_io.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -103,5 +106,68 @@ void main() {
       gatewayDeviceIdFromPublicKey(restored.publicKey),
       restored.deviceId,
     );
+  });
+
+  test('round-trips auth state through a string store', () async {
+    final backingStore = GatewayMemoryStringStore();
+    final store = GatewayJsonAuthStateStore(store: backingStore);
+
+    final identity = await store.readOrCreateIdentity();
+    final restoredIdentity = await store.readIdentity();
+    expect(restoredIdentity?.deviceId, identity.deviceId);
+
+    const token = GatewayStoredDeviceToken(
+      deviceId: 'device-1',
+      role: gatewayNodeRole,
+      token: 'device-token-1',
+      scopes: <String>['node.invoke'],
+      issuedAtMs: 7,
+    );
+    await store.write(token);
+    final restoredToken = await store.read(
+      deviceId: token.deviceId,
+      role: token.role,
+    );
+    expect(restoredToken?.token, token.token);
+    expect(restoredToken?.scopes, token.scopes);
+
+    final raw = await backingStore.readString(store.key);
+    expect(raw, isNotNull);
+
+    await store.delete(deviceId: token.deviceId, role: token.role);
+    await store.deleteIdentity();
+    expect(await store.readIdentity(), isNull);
+    expect(
+        await store.read(deviceId: token.deviceId, role: token.role), isNull);
+  });
+
+  test('round-trips auth state through the file-backed store', () async {
+    final tempDir = await Directory.systemTemp.createTemp(
+      'openclaw_gateway_auth_state_',
+    );
+    addTearDown(() => tempDir.delete(recursive: true));
+
+    final store = GatewayJsonFileAuthStateStore(
+      path: '${tempDir.path}/state.json',
+    );
+
+    final identity = await store.readOrCreateIdentity();
+    final restoredIdentity = await store.readIdentity();
+    expect(restoredIdentity?.deviceId, identity.deviceId);
+
+    const token = GatewayStoredDeviceToken(
+      deviceId: 'device-file',
+      role: gatewayDefaultRole,
+      token: 'file-token',
+    );
+    await store.write(token);
+    expect(
+      await store.read(deviceId: token.deviceId, role: token.role),
+      isNotNull,
+    );
+
+    await store.delete(deviceId: token.deviceId, role: token.role);
+    await store.deleteIdentity();
+    expect(await store.readIdentity(), isNull);
   });
 }
