@@ -23,6 +23,10 @@ WebSocket code.
   - chat history
   - streaming chat output
 
+The repo also includes a small runnable sample at `example/flutter_basic` for
+macOS and Linux. Use that first if you want to verify the SDK against a live
+gateway before building your own app shell.
+
 ## What Is Not Included Yet
 
 - gateway discovery

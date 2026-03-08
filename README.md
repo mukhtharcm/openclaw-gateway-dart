@@ -176,6 +176,10 @@ For app code, prefer the typed client families:
 - `client.admin` for typed control-plane and mutation methods
 - `client.operator` when you intentionally want the raw `JsonMap` wrappers
 
+A runnable sample app is included in `example/flutter_basic`. It is a small
+macOS/Linux Flutter client for health, sessions, chat history, and chat send
+flows against a known gateway URL.
+
 More docs:
 
 - [doc/flutter.md](doc/flutter.md)
