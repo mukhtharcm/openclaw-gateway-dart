@@ -1,0 +1,28 @@
+name: openclaw_gateway
+description: Pure Dart client for the OpenClaw gateway protocol for Dart, CLI, and Flutter apps.
+version: 0.1.0
+homepage: https://github.com/mukhtharcm/openclaw-gateway-dart
+repository: https://github.com/mukhtharcm/openclaw-gateway-dart
+issue_tracker: https://github.com/mukhtharcm/openclaw-gateway-dart/issues
+documentation: https://github.com/mukhtharcm/openclaw-gateway-dart#readme
+topics:
+  - openclaw
+  - gateway
+  - websocket
+  - dart
+  - flutter
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  args: ^2.7.0
+  web_socket_channel: ^3.0.3
+
+executables:
+  openclaw-gateway: openclaw_gateway_cli
+
+dev_dependencies:
+  lints: ^5.0.0
+  stream_channel: ^2.1.4
+  test: ^1.25.0
