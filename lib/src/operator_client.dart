@@ -1,5 +1,6 @@
 import 'package:openclaw_gateway/src/client.dart';
 import 'package:openclaw_gateway/src/chat_models.dart';
+import 'package:openclaw_gateway/src/event_models.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
 
 /// Typed wrappers for common operator-side gateway methods.
@@ -13,6 +14,68 @@ class GatewayOperatorClient {
   /// Typed `chat` event payloads.
   Stream<GatewayChatEvent> get chatEvents =>
       _client.eventsNamed('chat').map(GatewayChatEvent.fromEventFrame);
+
+  Stream<GatewayPresenceEvent> get presenceEvents =>
+      _client.eventsNamed('presence').map(GatewayPresenceEvent.fromEventFrame);
+
+  Stream<GatewayTickEvent> get tickEvents =>
+      _client.eventsNamed('tick').map(GatewayTickEvent.fromEventFrame);
+
+  Stream<GatewayShutdownEvent> get shutdownEvents =>
+      _client.eventsNamed('shutdown').map(GatewayShutdownEvent.fromEventFrame);
+
+  Stream<GatewayHealthEvent> get healthEvents =>
+      _client.eventsNamed('health').map(GatewayHealthEvent.fromEventFrame);
+
+  Stream<GatewayHeartbeatEvent> get heartbeatEvents => _client
+      .eventsNamed('heartbeat')
+      .map(GatewayHeartbeatEvent.fromEventFrame);
+
+  Stream<GatewayCronEvent> get cronEvents =>
+      _client.eventsNamed('cron').map(GatewayCronEvent.fromEventFrame);
+
+  Stream<GatewayTalkModeEvent> get talkModeEvents =>
+      _client.eventsNamed('talk.mode').map(GatewayTalkModeEvent.fromEventFrame);
+
+  Stream<GatewayNodePairRequestedEvent> get nodePairRequestedEvents => _client
+      .eventsNamed('node.pair.requested')
+      .map(GatewayNodePairRequestedEvent.fromEventFrame);
+
+  Stream<GatewayNodePairResolvedEvent> get nodePairResolvedEvents =>
+      _client.eventsNamed('node.pair.resolved').map(
+            GatewayNodePairResolvedEvent.fromEventFrame,
+          );
+
+  Stream<GatewayDevicePairRequestedEvent> get devicePairRequestedEvents =>
+      _client.eventsNamed('device.pair.requested').map(
+            GatewayDevicePairRequestedEvent.fromEventFrame,
+          );
+
+  Stream<GatewayDevicePairResolvedEvent> get devicePairResolvedEvents =>
+      _client.eventsNamed('device.pair.resolved').map(
+            GatewayDevicePairResolvedEvent.fromEventFrame,
+          );
+
+  Stream<GatewayVoiceWakeChangedEvent> get voiceWakeChangedEvents => _client
+      .eventsNamed('voicewake.changed')
+      .map(GatewayVoiceWakeChangedEvent.fromEventFrame);
+
+  Stream<GatewayExecApprovalRequestedEvent> get execApprovalRequestedEvents =>
+      _client.eventsNamed('exec.approval.requested').map(
+            GatewayExecApprovalRequestedEvent.fromEventFrame,
+          );
+
+  Stream<GatewayExecApprovalResolvedEvent> get execApprovalResolvedEvents =>
+      _client.eventsNamed('exec.approval.resolved').map(
+            GatewayExecApprovalResolvedEvent.fromEventFrame,
+          );
+
+  Stream<GatewayUpdateAvailableEvent> get updateAvailableEvents => _client
+      .eventsNamed('update.available')
+      .map(GatewayUpdateAvailableEvent.fromEventFrame);
+
+  Stream<GatewayAgentEvent> get agentEvents =>
+      _client.eventsNamed('agent').map(GatewayAgentEvent.fromEventFrame);
 
   /// Calls `health`.
   Future<JsonMap> health({bool probe = false}) {

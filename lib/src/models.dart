@@ -433,6 +433,24 @@ class GatewayResponseFrame {
 }
 
 /// Parsed gateway event frame.
+class GatewayStateVersion {
+  const GatewayStateVersion({
+    this.presence,
+    this.health,
+  });
+
+  factory GatewayStateVersion.fromJson(JsonMap json) {
+    return GatewayStateVersion(
+      presence: readNullableInt(json['presence']),
+      health: readNullableInt(json['health']),
+    );
+  }
+
+  final int? presence;
+  final int? health;
+}
+
+/// Parsed gateway event frame.
 class GatewayEventFrame {
   const GatewayEventFrame({
     required this.event,
@@ -446,14 +464,21 @@ class GatewayEventFrame {
       event: readRequiredString(json, 'event', context: 'event frame'),
       payload: json['payload'],
       seq: readNullableInt(json['seq']),
-      stateVersion: json['stateVersion'],
+      stateVersion: json['stateVersion'] == null
+          ? null
+          : GatewayStateVersion.fromJson(
+              asJsonMap(
+                json['stateVersion'],
+                context: 'event frame.stateVersion',
+              ),
+            ),
     );
   }
 
   final String event;
   final Object? payload;
   final int? seq;
-  final Object? stateVersion;
+  final GatewayStateVersion? stateVersion;
 }
 
 /// Parsed gateway-initiated request frame.

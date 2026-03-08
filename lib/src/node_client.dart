@@ -1,3 +1,4 @@
+import 'package:openclaw_gateway/src/automation_models.dart';
 import 'package:openclaw_gateway/src/client.dart';
 import 'package:openclaw_gateway/src/node_models.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
@@ -54,5 +55,13 @@ class GatewayNodeClient {
       params: const <String, Object?>{},
     );
     return GatewayCanvasCapabilityRefreshResult.fromJson(payload);
+  }
+
+  Future<GatewaySkillsBinsResult> skillsBins() async {
+    final payload = await _client.requestJsonMap(
+      'skills.bins',
+      params: const <String, Object?>{},
+    );
+    return GatewaySkillsBinsResult.fromJson(payload);
   }
 }

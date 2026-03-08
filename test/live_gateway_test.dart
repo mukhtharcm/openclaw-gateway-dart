@@ -21,7 +21,8 @@ void main() {
       token = _liveToken!;
     });
 
-    test('typed operator helpers succeed against a live gateway', () async {
+    test('typed query and admin helpers succeed against a live gateway',
+        () async {
       final client = await GatewayClient.connect(
         uri: uri,
         auth: GatewayAuth.token(token),
@@ -32,38 +33,76 @@ void main() {
       );
 
       try {
-        final health = await client.operator.health();
-        expect(health['ok'], isTrue);
+        final health = await client.query.health();
+        expect(health.ok, isTrue);
 
-        final status = await client.operator.status();
-        expect(status, contains('sessions'));
+        final status = await client.query.status();
+        expect(status.raw, contains('sessions'));
 
-        final channels = await client.operator.channelsStatus(probe: true);
-        expect(channels, contains('channels'));
+        final presence = await client.query.systemPresence();
+        expect(presence, isA<List<GatewayPresenceEntry>>());
 
-        final schema = await client.operator.configSchemaLookup(
+        final channels = await client.query.channelsStatus(probe: true);
+        expect(channels.channels, isA<JsonMap>());
+
+        final schema = await client.query.configSchemaLookup(
           path: 'gateway.mode',
         );
-        expect(schema['path'], 'gateway.mode');
+        expect(schema.path, 'gateway.mode');
 
-        final models = await client.operator.modelsList();
-        expect(models, contains('models'));
+        final sessions = await client.query.sessionsList(limit: 3);
+        expect(sessions.count, greaterThanOrEqualTo(0));
 
-        final tools = await client.operator.toolsCatalog(includePlugins: true);
-        expect(tools, contains('profiles'));
-        expect(tools, contains('groups'));
+        final models = await client.query.modelsList();
+        expect(models.models, isNotEmpty);
 
-        final agents = await client.operator.agentsList();
-        expect(agents, contains('agents'));
+        final tools = await client.query.toolsCatalog(includePlugins: true);
+        expect(tools.profiles, isA<List<GatewayToolCatalogProfile>>());
+        expect(tools.groups, isA<List<GatewayToolCatalogGroup>>());
 
-        final voiceWake = await client.operator.voiceWakeGet();
-        expect(voiceWake, contains('triggers'));
+        final agents = await client.admin.agentsList();
+        expect(agents.agents, isNotEmpty);
 
-        final cronStatus = await client.operator.cronStatus();
-        expect(cronStatus, contains('enabled'));
+        final voiceWake = await client.query.voiceWakeGet();
+        expect(voiceWake.triggers, isA<List<String>>());
 
-        final cronList = await client.operator.cronList(limit: 3);
-        expect(cronList, contains('jobs'));
+        final cronStatus = await client.query.cronStatus();
+        expect(cronStatus.enabled, isA<bool>());
+
+        final cronList = await client.query.cronList(limit: 3);
+        expect(cronList.jobs, isA<List<GatewayCronJob>>());
+
+        final approvals = await client.admin.execApprovalsGet();
+        expect(approvals.path, isNotEmpty);
+
+        final talkConfig = await client.admin.talkConfig();
+        expect(talkConfig.config, isA<JsonMap>());
+
+        final usageStatus = await client.admin.usageStatus();
+        expect(usageStatus.providers, isA<List<GatewayUsageProviderSummary>>());
+
+        final ttsStatus = await client.admin.ttsStatus();
+        expect(ttsStatus.enabled, isA<bool>());
+
+        final ttsProviders = await client.admin.ttsProviders();
+        expect(ttsProviders.providers, isA<List<GatewayTtsProviderInfo>>());
+
+        final logs = await client.admin.logsTail(limit: 5);
+        expect(logs.lines, isA<List<String>>());
+
+        final doctor = await client.admin.doctorMemoryStatus();
+        expect(doctor.agentId, isNotEmpty);
+
+        final heartbeat = await client.admin.lastHeartbeat();
+        expect(
+          heartbeat == null || heartbeat.ts > 0,
+          isTrue,
+        );
+
+        final agentIdentity = await client.admin.agentIdentityGet(
+          sessionKey: 'main',
+        );
+        expect(agentIdentity.agentId, isNotEmpty);
 
         final devicePairs = await client.devices.pairList();
         expect(devicePairs, contains('paired'));
@@ -236,6 +275,9 @@ void main() {
         });
 
         try {
+          final skillsBins = await nodeClient.node.skillsBins();
+          expect(skillsBins.bins, isA<List<String>>());
+
           final listedNode = await _waitForNode(
             operator,
             identity.deviceId,

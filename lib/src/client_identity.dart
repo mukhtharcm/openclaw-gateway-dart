@@ -1,60 +1,39 @@
+import 'package:openclaw_gateway/src/contract.dart';
+
 /// Allowlisted gateway client ids accepted by the OpenClaw gateway.
 abstract final class GatewayClientIds {
-  static const String webchatUi = 'webchat-ui';
-  static const String controlUi = 'openclaw-control-ui';
-  static const String webchat = 'webchat';
-  static const String cli = 'cli';
-  static const String gatewayClient = 'gateway-client';
-  static const String macosApp = 'openclaw-macos';
-  static const String iosApp = 'openclaw-ios';
-  static const String androidApp = 'openclaw-android';
-  static const String nodeHost = 'node-host';
-  static const String test = 'test';
-  static const String fingerprint = 'fingerprint';
-  static const String probe = 'openclaw-probe';
+  static const String webchatUi = GatewayContractClientIds.webchatUi;
+  static const String controlUi = GatewayContractClientIds.controlUi;
+  static const String webchat = GatewayContractClientIds.webchat;
+  static const String cli = GatewayContractClientIds.cli;
+  static const String gatewayClient = GatewayContractClientIds.gatewayClient;
+  static const String macosApp = GatewayContractClientIds.macosApp;
+  static const String iosApp = GatewayContractClientIds.iosApp;
+  static const String androidApp = GatewayContractClientIds.androidApp;
+  static const String nodeHost = GatewayContractClientIds.nodeHost;
+  static const String test = GatewayContractClientIds.test;
+  static const String fingerprint = GatewayContractClientIds.fingerprint;
+  static const String probe = GatewayContractClientIds.probe;
 
-  static const List<String> values = <String>[
-    webchatUi,
-    controlUi,
-    webchat,
-    cli,
-    gatewayClient,
-    macosApp,
-    iosApp,
-    androidApp,
-    nodeHost,
-    test,
-    fingerprint,
-    probe,
-  ];
+  static const List<String> values = GatewayContractClientIds.values;
 }
 
 /// Allowlisted gateway client modes accepted by the OpenClaw gateway.
 abstract final class GatewayClientModes {
-  static const String webchat = 'webchat';
-  static const String cli = 'cli';
-  static const String ui = 'ui';
-  static const String backend = 'backend';
-  static const String node = 'node';
-  static const String probe = 'probe';
-  static const String test = 'test';
+  static const String webchat = GatewayContractClientModes.webchat;
+  static const String cli = GatewayContractClientModes.cli;
+  static const String ui = GatewayContractClientModes.ui;
+  static const String backend = GatewayContractClientModes.backend;
+  static const String node = GatewayContractClientModes.node;
+  static const String probe = GatewayContractClientModes.probe;
+  static const String test = GatewayContractClientModes.test;
 
-  static const List<String> values = <String>[
-    webchat,
-    cli,
-    ui,
-    backend,
-    node,
-    probe,
-    test,
-  ];
+  static const List<String> values = GatewayContractClientModes.values;
 }
 
 /// Allowlisted gateway client capability strings.
 abstract final class GatewayClientCaps {
-  static const String toolEvents = 'tool-events';
+  static const String toolEvents = GatewayContractClientCaps.toolEvents;
 
-  static const List<String> values = <String>[
-    toolEvents,
-  ];
+  static const List<String> values = GatewayContractClientCaps.values;
 }

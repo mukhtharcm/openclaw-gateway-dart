@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
 
+import 'package:openclaw_gateway/src/admin_client.dart';
 import 'package:openclaw_gateway/src/auth.dart';
 import 'package:openclaw_gateway/src/connect_error_details.dart';
 import 'package:openclaw_gateway/src/connect_payload.dart';
@@ -13,6 +14,7 @@ import 'package:openclaw_gateway/src/models.dart';
 import 'package:openclaw_gateway/src/node_client.dart';
 import 'package:openclaw_gateway/src/nodes_client.dart';
 import 'package:openclaw_gateway/src/operator_client.dart';
+import 'package:openclaw_gateway/src/query_client.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -160,6 +162,12 @@ class GatewayClient {
 
   /// Operator-oriented helper methods on top of raw gateway RPC.
   GatewayOperatorClient get operator => GatewayOperatorClient(this);
+
+  /// Typed read/query helpers for common operator-side gateway methods.
+  GatewayQueryClient get query => GatewayQueryClient(this);
+
+  /// Typed admin and mutation helpers for gateway control-plane methods.
+  GatewayAdminClient get admin => GatewayAdminClient(this);
 
   /// Operator-side node management helpers.
   GatewayNodesClient get nodes => GatewayNodesClient(this);

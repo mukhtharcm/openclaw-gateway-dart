@@ -1,3 +1,4 @@
+import 'package:openclaw_gateway/src/contract.dart';
 import 'package:openclaw_gateway/src/errors.dart';
 
 /// JSON object payload used by gateway frames and responses.
@@ -7,7 +8,7 @@ typedef JsonMap = Map<String, Object?>;
 typedef JsonList = List<Object?>;
 
 /// Current OpenClaw gateway protocol version supported by this package.
-const int gatewayProtocolVersion = 3;
+const int gatewayProtocolVersion = gatewayContractProtocolVersion;
 
 /// Event name sent by the gateway before the client sends `connect`.
 const String gatewayConnectChallengeEvent = 'connect.challenge';
@@ -103,6 +104,14 @@ bool readRequiredBool(
   throw GatewayProtocolException('Missing or invalid "$key" in $context.');
 }
 
+/// Reads an optional boolean value.
+bool? readNullableBool(Object? value) {
+  if (value is bool) {
+    return value;
+  }
+  return null;
+}
+
 /// Reads a required integer property from a JSON object.
 int readRequiredInt(
   JsonMap json,
@@ -139,4 +148,54 @@ List<String> readStringList(
     }
     return item;
   }).toList(growable: false);
+}
+
+/// Reads a list of JSON objects from a JSON value.
+List<JsonMap> readJsonMapList(
+  Object? value, {
+  required String context,
+}) {
+  return asJsonList(value, context: context)
+      .map((entry) => asJsonMap(entry, context: '$context[]'))
+      .toList(growable: false);
+}
+
+/// Reads a string-to-string map from a JSON object value.
+Map<String, String> readStringMap(
+  Object? value, {
+  required String context,
+}) {
+  final json = asJsonMap(value, context: context);
+  final result = <String, String>{};
+  for (final entry in json.entries) {
+    if (entry.value is! String) {
+      throw GatewayProtocolException(
+        'Expected string values for "$context.${entry.key}".',
+      );
+    }
+    result[entry.key] = entry.value! as String;
+  }
+  return Map<String, String>.unmodifiable(result);
+}
+
+/// Reads a string-to-bool map from a JSON object value.
+Map<String, bool> readBoolMap(
+  Object? value, {
+  required String context,
+}) {
+  if (value == null) {
+    return const <String, bool>{};
+  }
+  final json = asJsonMap(value, context: context);
+  final result = <String, bool>{};
+  for (final entry in json.entries) {
+    final boolValue = readNullableBool(entry.value);
+    if (boolValue == null) {
+      throw GatewayProtocolException(
+        'Expected bool values for "$context.${entry.key}".',
+      );
+    }
+    result[entry.key] = boolValue;
+  }
+  return Map<String, bool>.unmodifiable(result);
 }
