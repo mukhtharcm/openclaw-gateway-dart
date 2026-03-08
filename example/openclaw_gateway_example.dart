@@ -24,12 +24,13 @@ Future<void> main() async {
     uri: Uri.parse(rawUrl),
     auth: auth,
     clientInfo: const GatewayClientInfo(
-      id: 'gateway-client',
+      id: GatewayClientIds.gatewayClient,
       version: '0.1.0',
       platform: 'dart',
-      mode: 'backend',
+      mode: GatewayClientModes.backend,
       displayName: 'OpenClaw Gateway Example',
     ),
+    autoReconnect: true,
   );
 
   try {

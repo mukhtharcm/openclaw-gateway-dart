@@ -11,6 +11,7 @@ WebSocket code.
 
 - connecting to a known gateway URL
 - token or password authentication
+- device identity and cached device-token auth
 - request/response gateway methods
 - listening to gateway events
 - reconnect/backoff and lifecycle state
@@ -25,8 +26,7 @@ WebSocket code.
 - gateway discovery
 - secure storage helpers
 - TLS pinning or TOFU helpers
-- device pairing and device identity flows
-- node-mode helpers
+- opinionated storage adapters for device identities and device tokens
 
 ## Basic Client Setup
 
@@ -39,10 +39,10 @@ Future<GatewayClient> connectGateway() {
     auth: const GatewayAuth.token('gateway-shared-token'),
     autoReconnect: true,
     clientInfo: const GatewayClientInfo(
-      id: 'gateway-client',
+      id: GatewayClientIds.gatewayClient,
       version: '0.1.0',
       platform: 'flutter',
-      mode: 'ui',
+      mode: GatewayClientModes.ui,
       displayName: 'OpenClaw Flutter',
     ),
   );
@@ -52,8 +52,8 @@ Future<GatewayClient> connectGateway() {
 ## Listening To Events
 
 ```dart
-Stream<GatewayEventFrame> chatEvents(GatewayClient client) {
-  return client.eventsNamed('chat');
+Stream<GatewayChatEvent> chatEvents(GatewayClient client) {
+  return client.operator.chatEvents;
 }
 ```
 
@@ -65,6 +65,40 @@ Stream<GatewayConnectionState> connectionStates(GatewayClient client) {
 }
 ```
 
+## Device Auth
+
+```dart
+Future<GatewayClient> connectWithDeviceAuth(Uri uri) async {
+  final identity = await GatewayEd25519Identity.generate();
+  final tokens = GatewayMemoryDeviceTokenStore();
+
+  return GatewayClient.connect(
+    uri: uri,
+    auth: const GatewayAuth.none(),
+    deviceIdentity: identity,
+    deviceTokenStore: tokens,
+    autoReconnect: true,
+    clientInfo: const GatewayClientInfo(
+      id: GatewayClientIds.gatewayClient,
+      version: '0.1.0',
+      platform: 'flutter',
+      mode: GatewayClientModes.ui,
+      displayName: 'OpenClaw Flutter',
+    ),
+  );
+}
+```
+
+Use a real `GatewayDeviceTokenStore` implementation backed by secure storage in
+production Flutter apps.
+
+## Node-Aware Apps
+
+The package now supports both sides of node flows:
+
+- `client.nodes` for operator-side node inventory, pairing, and `node.invoke`
+- `client.node` for node-role sessions handling `node.invoke.request`
+
 ## Suggested App Architecture
 
 - create one long-lived `GatewayClient`
@@ -72,6 +106,7 @@ Stream<GatewayConnectionState> connectionStates(GatewayClient client) {
 - expose typed operations through your own repository or service classes
 - keep gateway secrets out of source code
 - close the client cleanly when the app or session ends
+- persist device identities and device tokens in app-managed storage
 
 ## Recommended Next Layer
 
@@ -82,3 +117,4 @@ on top of this package for:
 - app lifecycle integration
 - user-facing connection state
 - mapping raw chat events into UI state
+- gateway discovery and trust UX

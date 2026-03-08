@@ -5,11 +5,11 @@ import 'dart:io';
 import 'package:args/args.dart';
 import 'package:openclaw_gateway/openclaw_gateway.dart';
 
-const String _defaultClientId = 'cli';
+const String _defaultClientId = GatewayClientIds.cli;
 const String _defaultClientVersion = '0.1.0';
 const String _defaultDisplayName = 'OpenClaw Dart CLI';
 const String _defaultPlatform = 'dart';
-const String _defaultMode = 'cli';
+const String _defaultMode = GatewayClientModes.cli;
 
 Future<void> main(List<String> arguments) async {
   final parser = _buildParser();

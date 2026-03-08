@@ -66,6 +66,207 @@ void main() {
       await client.close();
     });
 
+    test('provides typed chat events and preserves explicit null patch fields',
+        () async {
+      final channel = FakeWebSocketChannel();
+      unawaited(_completeSuccessfulHandshake(channel));
+
+      final client = await _connectClient(channel);
+
+      final chatEventFuture = client.operator.chatEvents.first;
+      channel.sendJson({
+        'type': 'event',
+        'event': 'chat',
+        'payload': {
+          'runId': 'run-1',
+          'sessionKey': 'main',
+          'seq': 2,
+          'state': 'final',
+          'message': {'role': 'assistant', 'content': 'done'},
+        },
+      });
+      final chatEvent = await chatEventFuture;
+      expect(chatEvent.runId, 'run-1');
+      expect(chatEvent.isTerminal, isTrue);
+
+      final patchFuture = client.operator.sessionsPatch(
+        key: 'main',
+        label: null,
+        execNode: 'node-1',
+      );
+      final patchRequest = await channel.nextClientJson();
+      expect(patchRequest['method'], 'sessions.patch');
+      expect(
+        patchRequest['params'],
+        containsPair('label', isNull),
+      );
+      expect(
+        patchRequest['params'],
+        containsPair('execNode', 'node-1'),
+      );
+      channel.sendJson({
+        'type': 'res',
+        'id': patchRequest['id'],
+        'ok': true,
+        'payload': {'ok': true},
+      });
+      await expectLater(patchFuture, completion({'ok': true}));
+
+      await client.close();
+    });
+
+    test('parses node list, describe, and invoke results', () async {
+      final channel = FakeWebSocketChannel();
+      unawaited(_completeSuccessfulHandshake(channel));
+
+      final client = await _connectClient(channel);
+
+      final listFuture = client.nodes.list();
+      final listRequest = await channel.nextClientJson();
+      expect(listRequest['method'], 'node.list');
+      channel.sendJson({
+        'type': 'res',
+        'id': listRequest['id'],
+        'ok': true,
+        'payload': {
+          'ts': 1,
+          'nodes': [
+            {
+              'nodeId': 'node-1',
+              'displayName': 'Node One',
+              'platform': 'android',
+              'caps': ['camera'],
+              'commands': ['ping'],
+              'paired': true,
+              'connected': true,
+            },
+          ],
+        },
+      });
+      final nodes = await listFuture;
+      expect(nodes, hasLength(1));
+      expect(nodes.first.nodeId, 'node-1');
+
+      final describeFuture = client.nodes.describe(nodeId: 'node-1');
+      final describeRequest = await channel.nextClientJson();
+      expect(describeRequest['method'], 'node.describe');
+      channel.sendJson({
+        'type': 'res',
+        'id': describeRequest['id'],
+        'ok': true,
+        'payload': {
+          'nodeId': 'node-1',
+          'displayName': 'Node One',
+          'platform': 'android',
+          'caps': ['camera'],
+          'commands': ['ping'],
+          'paired': true,
+          'connected': true,
+        },
+      });
+      final describedNode = await describeFuture;
+      expect(describedNode.displayName, 'Node One');
+
+      final invokeFuture = client.nodes.invoke(
+        nodeId: 'node-1',
+        command: 'ping',
+      );
+      final invokeRequest = await channel.nextClientJson();
+      expect(invokeRequest['method'], 'node.invoke');
+      final invokeParams =
+          Map<String, Object?>.from(invokeRequest['params'] as Map);
+      expect(invokeParams['idempotencyKey'], isA<String>());
+      channel.sendJson({
+        'type': 'res',
+        'id': invokeRequest['id'],
+        'ok': true,
+        'payload': {
+          'ok': true,
+          'nodeId': 'node-1',
+          'command': 'ping',
+          'payload': {'pong': true},
+        },
+      });
+      final invokeResult = await invokeFuture;
+      expect(invokeResult.nodeId, 'node-1');
+      expect(invokeResult.payload, {'pong': true});
+
+      await client.close();
+    });
+
+    test('handles typed node invoke requests and node-role responses',
+        () async {
+      final channel = FakeWebSocketChannel();
+      unawaited(_completeSuccessfulHandshake(channel));
+
+      final client = await _connectClient(channel);
+
+      final invokeRequestFuture = client.node.invokeRequests.first;
+      channel.sendJson({
+        'type': 'event',
+        'event': 'node.invoke.request',
+        'payload': {
+          'id': 'invoke-1',
+          'nodeId': 'node-1',
+          'command': 'camera.capture',
+          'paramsJSON': '{"quality":"high"}',
+          'timeoutMs': 5000,
+          'idempotencyKey': 'idem-1',
+        },
+      });
+      final invokeRequest = await invokeRequestFuture;
+      expect(invokeRequest.command, 'camera.capture');
+      expect(invokeRequest.params, {'quality': 'high'});
+
+      final invokeResultFuture = client.node.sendInvokeResult(
+        id: 'invoke-1',
+        nodeId: 'node-1',
+        ok: true,
+        payload: {'ok': true},
+      );
+      final invokeResultRequest = await channel.nextClientJson();
+      expect(invokeResultRequest['method'], 'node.invoke.result');
+      channel.sendJson({
+        'type': 'res',
+        'id': invokeResultRequest['id'],
+        'ok': true,
+        'payload': {'ok': true},
+      });
+      await expectLater(invokeResultFuture, completion({'ok': true}));
+
+      final refreshFuture = client.node.refreshCanvasCapability();
+      final refreshRequest = await channel.nextClientJson();
+      expect(refreshRequest['method'], 'node.canvas.capability.refresh');
+      channel.sendJson({
+        'type': 'res',
+        'id': refreshRequest['id'],
+        'ok': true,
+        'payload': {
+          'canvasCapability': 'cap-1',
+          'canvasCapabilityExpiresAtMs': 1234,
+          'canvasHostUrl': 'https://canvas.example/cap-1',
+        },
+      });
+      final refreshResult = await refreshFuture;
+      expect(refreshResult.canvasCapability, 'cap-1');
+
+      final eventFuture = client.node.sendEvent(
+        event: 'system-presence',
+        payload: {'awake': true},
+      );
+      final eventRequest = await channel.nextClientJson();
+      expect(eventRequest['method'], 'node.event');
+      channel.sendJson({
+        'type': 'res',
+        'id': eventRequest['id'],
+        'ok': true,
+        'payload': {'ok': true},
+      });
+      await expectLater(eventFuture, completion({'ok': true}));
+
+      await client.close();
+    });
+
     test('throws GatewayResponseException for request errors', () async {
       final channel = FakeWebSocketChannel();
       unawaited(_completeSuccessfulHandshake(channel));

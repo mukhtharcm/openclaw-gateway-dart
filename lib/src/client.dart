@@ -5,10 +5,13 @@ import 'dart:math' as math;
 import 'package:openclaw_gateway/src/auth.dart';
 import 'package:openclaw_gateway/src/connect_error_details.dart';
 import 'package:openclaw_gateway/src/connect_payload.dart';
+import 'package:openclaw_gateway/src/devices_client.dart';
 import 'package:openclaw_gateway/src/device_identity.dart';
 import 'package:openclaw_gateway/src/device_token_store.dart';
 import 'package:openclaw_gateway/src/errors.dart';
 import 'package:openclaw_gateway/src/models.dart';
+import 'package:openclaw_gateway/src/node_client.dart';
+import 'package:openclaw_gateway/src/nodes_client.dart';
 import 'package:openclaw_gateway/src/operator_client.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -157,6 +160,15 @@ class GatewayClient {
 
   /// Operator-oriented helper methods on top of raw gateway RPC.
   GatewayOperatorClient get operator => GatewayOperatorClient(this);
+
+  /// Operator-side node management helpers.
+  GatewayNodesClient get nodes => GatewayNodesClient(this);
+
+  /// Operator-side device pairing and device-token helpers.
+  GatewayDevicesClient get devices => GatewayDevicesClient(this);
+
+  /// Node-role helpers for node-host sessions.
+  GatewayNodeClient get node => GatewayNodeClient(this);
 
   /// Filters the event stream by event name.
   Stream<GatewayEventFrame> eventsNamed(String eventName) {

@@ -59,10 +59,10 @@ Future<void> main() async {
     auth: const GatewayAuth.token('gateway-shared-token'),
     autoReconnect: true,
     clientInfo: const GatewayClientInfo(
-      id: 'gateway-client',
+      id: GatewayClientIds.gatewayClient,
       version: '0.1.0',
       platform: 'dart',
-      mode: 'backend',
+      mode: GatewayClientModes.backend,
       displayName: 'My OpenClaw App',
     ),
   );
@@ -93,10 +93,10 @@ Future<GatewayClient> openGateway() {
     auth: const GatewayAuth.token('gateway-shared-token'),
     autoReconnect: true,
     clientInfo: const GatewayClientInfo(
-      id: 'gateway-client',
+      id: GatewayClientIds.gatewayClient,
       version: '0.1.0',
       platform: 'flutter',
-      mode: 'ui',
+      mode: GatewayClientModes.ui,
       displayName: 'OpenClaw Flutter',
     ),
   );
@@ -109,14 +109,14 @@ class GatewayEventsView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return StreamBuilder<GatewayEventFrame>(
-      stream: client.eventsNamed('chat'),
+    return StreamBuilder<GatewayChatEvent>(
+      stream: client.operator.chatEvents,
       builder: (context, snapshot) {
         final event = snapshot.data;
         if (event == null) {
           return const Text('Waiting for chat events...');
         }
-        return Text(event.payload.toString());
+        return Text(event.message.toString());
       },
     );
   }
@@ -131,6 +131,61 @@ More docs:
 
 - [doc/flutter.md](doc/flutter.md)
 - [doc/cli.md](doc/cli.md)
+- [doc/device-auth.md](doc/device-auth.md)
+- [doc/node.md](doc/node.md)
+
+## Device Auth
+
+The package can sign gateway `connect` requests with an Ed25519 device
+identity and reuse/persist role-scoped device tokens.
+
+```dart
+final identity = await GatewayEd25519Identity.generate();
+final tokens = GatewayMemoryDeviceTokenStore();
+
+final client = await GatewayClient.connect(
+  uri: Uri.parse('ws://127.0.0.1:18789'),
+  auth: const GatewayAuth.none(),
+  deviceIdentity: identity,
+  deviceTokenStore: tokens,
+  clientInfo: const GatewayClientInfo(
+    id: GatewayClientIds.gatewayClient,
+    version: '0.1.0',
+    platform: 'dart',
+    mode: GatewayClientModes.backend,
+    displayName: 'OpenClaw Device Client',
+  ),
+  autoReconnect: true,
+);
+```
+
+`GatewayMemoryDeviceTokenStore` is only a starter implementation. Real apps
+should back `GatewayDeviceTokenStore` with secure or persistent storage.
+
+## Node APIs
+
+Operator-side node management:
+
+```dart
+final nodes = await client.nodes.list();
+final result = await client.nodes.invoke(
+  nodeId: nodes.first.nodeId,
+  command: 'ping',
+);
+```
+
+Node-role runtime handling:
+
+```dart
+await for (final request in client.node.invokeRequests) {
+  await client.node.sendInvokeResult(
+    id: request.id,
+    nodeId: request.nodeId,
+    ok: true,
+    payload: {'handled': true},
+  );
+}
+```
 
 ## Sample CLI
 
@@ -176,9 +231,19 @@ default and `cli` is the safest CLI default.
   - exposes raw request helpers and event streams
   - exposes `connectionStates` for lifecycle tracking
 - `GatewayOperatorClient`
-  - typed helpers for common operator methods
+  - typed helpers for channels, config, sessions, chat, models, tools, agents, voice wake, and cron
+- `GatewayNodesClient`
+  - operator-side node inventory, pairing, rename, and invoke helpers
+- `GatewayDevicesClient`
+  - operator-side device pairing and token rotation helpers
+- `GatewayNodeClient`
+  - node-role helpers for `node.invoke.request`, `node.invoke.result`, `node.event`, and canvas capability refresh
 - `GatewayAuth`
   - token, password, and device-token auth shapes
+- `GatewayEd25519Identity`
+  - device identity generation, serialization, and signing helpers
+- `GatewayDeviceTokenStore`
+  - pluggable persistence for role-scoped device tokens returned by `hello-ok`
 - `GatewayConnectOptions`
   - lower-level connect options when the defaults are not enough
 
