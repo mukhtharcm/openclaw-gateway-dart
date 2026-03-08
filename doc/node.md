@@ -73,6 +73,40 @@ Node-role helpers:
 - `client.node.sendInvokeResult(...)`
 - `client.node.sendEvent(...)`
 - `client.node.refreshCanvasCapability()`
+- `client.node.skillsBins()`
+
+For larger node hosts, use `GatewayNodeCapabilityRegistry` to compute connect
+metadata and route invoke requests:
+
+```dart
+final registry = GatewayNodeCapabilityRegistry(
+  capabilities: const [
+    GatewayNodeCapability(name: 'camera'),
+  ],
+  commands: [
+    GatewayNodeCommand(
+      name: 'camera.list',
+      capabilities: const ['camera'],
+      handler: (context) async => const GatewayNodeCommandResult.ok(
+        payload: {'cameras': []},
+      ),
+    ),
+  ],
+  permissionsResolver: () async => {
+    'camera': true,
+  },
+);
+
+final snapshot = await registry.snapshot();
+print(snapshot.capabilities);
+print(snapshot.commands);
+
+final subscription = registry.attach(client);
+```
+
+The registry helps you keep advertised `caps`, `commands`, and runtime invoke
+handlers in one place, but the gateway still enforces its own command policy.
+Node apps should only advertise commands they can actually serve.
 
 ## Sample Node Host
 

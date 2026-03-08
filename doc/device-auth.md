@@ -70,9 +70,49 @@ final exported = await identity.exportData();
 final restored = GatewayEd25519Identity.fromData(exported);
 ```
 
-For token persistence, implement `GatewayDeviceTokenStore` with your own
-storage backend, for example secure storage on Flutter mobile or a file/database
-in a Dart backend.
+If you want one persisted JSON blob for both the identity and device tokens,
+use one of the built-in stores:
+
+```dart
+final memory = GatewayJsonAuthStateStore(
+  store: GatewayMemoryStringStore(),
+);
+```
+
+On `dart:io` platforms, you can use the file-backed variant:
+
+```dart
+import 'package:openclaw_gateway/openclaw_gateway_io.dart';
+
+final fileStore = GatewayJsonFileAuthStateStore(
+  path: '.openclaw_gateway_auth_state.json',
+);
+```
+
+For Flutter or other app runtimes, implement `GatewayStringStore` with your
+preferred secure storage backend and layer `GatewayJsonAuthStateStore` on top.
+
+```dart
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:openclaw_gateway/openclaw_gateway.dart';
+
+class SecureStorageStringStore implements GatewayStringStore {
+  SecureStorageStringStore(this._storage);
+
+  final FlutterSecureStorage _storage;
+
+  @override
+  Future<void> deleteString(String key) => _storage.delete(key: key);
+
+  @override
+  Future<String?> readString(String key) => _storage.read(key: key);
+
+  @override
+  Future<void> writeString(String key, String value) {
+    return _storage.write(key: key, value: value);
+  }
+}
+```
 
 ## Auth Precedence
 

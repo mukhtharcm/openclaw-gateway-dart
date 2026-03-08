@@ -22,20 +22,23 @@ Included today:
 - `connect.challenge` plus `connect` handshake
 - reconnect/backoff plus lifecycle state tracking
 - request/response RPC helpers
-- event streams and incoming server request streams
+- typed event streams and incoming server request streams
 - Ed25519 device identities
 - device-token persistence and reuse
+- portable auth-state storage abstractions plus JSON-backed stores
 - operator-oriented helpers for channels, config, sessions, chat, models, tools, agents, voice wake, and cron
+- typed query/admin clients for system presence, config, sessions, tools, cron, exec approvals, wizard, talk, usage, TTS, agents, skills, logs, secrets, updates, send, browser, and agent flows
 - operator-side node and device helpers
+- public node capability registry and invoke router helpers
 - node-role helpers for invoke requests, invoke results, node events, and canvas capability refresh
+- generated contract metadata for protocol version, method names, event names, client ids, modes, and caps
 - sample CLI executable for local testing
 
 Not included yet:
 
 - gateway discovery
 - TLS pinning / TOFU helpers
-- secure storage adapters
-- generated protocol models from the upstream TypeScript schema
+- full generated request/response DTOs from the upstream TypeScript schema
 
 ## Install
 
@@ -76,11 +79,13 @@ Future<void> main() async {
   );
 
   try {
-    final health = await client.operator.health();
-    final sessions = await client.operator.sessionsList(limit: 10);
+    final health = await client.query.health();
+    final sessions = await client.query.sessionsList(limit: 10);
+    final usage = await client.admin.usageStatus();
 
     print(health);
     print(sessions);
+    print(usage.providers.map((entry) => entry.provider).toList());
   } finally {
     await client.close();
   }
@@ -135,6 +140,42 @@ class GatewayEventsView extends StatelessWidget {
 Use `client.connectionStates` to drive UI or logging for transitions such as
 `connecting`, `connected`, `reconnecting`, and `closed`.
 
+For Flutter credential storage, implement `GatewayStringStore` with your secure
+backend and layer `GatewayJsonAuthStateStore` on top. A minimal
+`flutter_secure_storage` adapter looks like this:
+
+```dart
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:openclaw_gateway/openclaw_gateway.dart';
+
+class SecureStorageStringStore implements GatewayStringStore {
+  SecureStorageStringStore(this._storage);
+
+  final FlutterSecureStorage _storage;
+
+  @override
+  Future<void> deleteString(String key) {
+    return _storage.delete(key: key);
+  }
+
+  @override
+  Future<String?> readString(String key) {
+    return _storage.read(key: key);
+  }
+
+  @override
+  Future<void> writeString(String key, String value) {
+    return _storage.write(key: key, value: value);
+  }
+}
+```
+
+For app code, prefer the typed client families:
+
+- `client.query` for typed read/list/status methods
+- `client.admin` for typed control-plane and mutation methods
+- `client.operator` when you intentionally want the raw `JsonMap` wrappers
+
 More docs:
 
 - [doc/flutter.md](doc/flutter.md)
@@ -174,6 +215,9 @@ final client = await GatewayClient.connect(
 
 `GatewayMemoryDeviceTokenStore` is only a starter implementation. Real apps
 should back `GatewayDeviceTokenStore` with secure or persistent storage.
+If you want one persisted blob for both identity and device tokens, use
+`GatewayJsonAuthStateStore` with a custom `GatewayStringStore`, or
+`GatewayJsonFileAuthStateStore` on `dart:io` platforms.
 Use `client.devices.pairList()`, `client.devices.pairApprove(...)`, and
 `client.devices.pairReject(...)` to build the operator-side pairing flow.
 
@@ -203,6 +247,50 @@ await for (final request in client.node.invokeRequests) {
     );
   }
 }
+```
+
+## Contract Sync
+
+The package ships generated contract metadata in `GatewayMethodNames`,
+`GatewayEventNames`, `GatewayClientIds`, `GatewayClientModes`, and
+`GatewayClientCaps`.
+
+To refresh the generated metadata from an OpenClaw checkout:
+
+```sh
+dart run tool/sync_openclaw_contract.dart \
+  --openclaw-root ../contrib/openclaw
+```
+
+This keeps the method/event catalog and allowlisted client identifiers aligned
+with the upstream gateway without hard-coding those lists by hand.
+
+For larger node-host apps, prefer the public capability registry instead of a
+manual `switch`:
+
+```dart
+final registry = GatewayNodeCapabilityRegistry(
+  capabilities: const [
+    GatewayNodeCapability(name: 'camera'),
+  ],
+  commands: [
+    GatewayNodeCommand(
+      name: 'camera.list',
+      capabilities: const ['camera'],
+      handler: (context) async => const GatewayNodeCommandResult.ok(
+        payload: {'cameras': []},
+      ),
+    ),
+  ],
+  permissionsResolver: () async => {
+    'camera': true,
+  },
+);
+
+final snapshot = await registry.snapshot();
+print(snapshot.commands);
+
+final sub = registry.attach(client);
 ```
 
 For a runnable sample node host, use the dedicated executable:

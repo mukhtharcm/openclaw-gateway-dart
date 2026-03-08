@@ -5,13 +5,21 @@
 - Added auto reconnect, connection lifecycle state streaming, and tick timeout
   detection to `GatewayClient`.
 - Added allowlisted gateway client id and mode constants.
+- Added generated contract metadata for gateway methods, events, client ids,
+  client modes, client caps, and protocol version, plus a sync tool that
+  mirrors those lists from the OpenClaw source tree.
 - Added Ed25519 device identities and pluggable device-token persistence for
   authenticated reconnects and paired-device flows.
 - Added typed operator wrappers for channels, config schema/apply, sessions
   patch/reset/delete/compact, models, tools, agents, voice wake, and cron.
+- Added typed query/admin wrappers for system presence/events, config writes,
+  session mutations, usage, TTS, wizard, exec approvals, agent/admin flows,
+  logs, updates, secrets, and browser requests.
 - Added dedicated operator-side node and device clients plus node-role helpers
   for `node.invoke.request`, `node.invoke.result`, `node.event`, and canvas
   capability refresh.
+- Added portable auth-state stores backed by `GatewayStringStore` or
+  `dart:io` JSON files for device identities and cached device tokens.
 - Added typed CLI helpers for `nodes-list`, `node-describe`, and `node-invoke`,
   plus a dedicated sample node-host executable with persisted identity/token
   state and optional pairing approval.
