@@ -41,5 +41,10 @@ the example.
 ## Notes
 
 - The app depends on the local package source via `path: ../..`.
+- The macOS runner now includes outbound network sandbox access plus local
+  networking ATS allowance for the default `ws://127.0.0.1:18789` gateway
+  workflow.
 - It is meant as a starting point, not a production app shell.
 - For real apps, back auth state and device tokens with secure storage.
+- If you already built the macOS app before pulling this fix, run
+  `flutter clean` once before `flutter run -d macos`.
