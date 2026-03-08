@@ -17,8 +17,17 @@ jobs:
       - name: Set up Dart
         uses: dart-lang/setup-dart@v1
 
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
       - name: Install dependencies
         run: dart pub get
+
+      - name: Install example dependencies
+        working-directory: example/flutter_basic
+        run: flutter pub get
 
       - name: Check formatting
         run: dart format --output=none --set-exit-if-changed .
@@ -26,8 +35,16 @@ jobs:
       - name: Analyze
         run: dart analyze
 
+      - name: Analyze Flutter example
+        working-directory: example/flutter_basic
+        run: flutter analyze
+
       - name: Test
         run: dart test
+
+      - name: Test Flutter example
+        working-directory: example/flutter_basic
+        run: flutter test
 
       - name: Publish dry run
         run: dart pub publish --dry-run
