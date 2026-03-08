@@ -12,8 +12,14 @@ const int gatewayProtocolVersion = 3;
 /// Event name sent by the gateway before the client sends `connect`.
 const String gatewayConnectChallengeEvent = 'connect.challenge';
 
+/// Operator role used by UI and admin-style gateway clients.
+const String gatewayOperatorRole = 'operator';
+
+/// Node role used by node-host gateway clients.
+const String gatewayNodeRole = 'node';
+
 /// Default client role used by operator-style clients.
-const String gatewayDefaultRole = 'operator';
+const String gatewayDefaultRole = gatewayOperatorRole;
 
 /// Default scopes requested by [GatewayConnectOptions.forOperator].
 const List<String> defaultOperatorScopes = <String>[

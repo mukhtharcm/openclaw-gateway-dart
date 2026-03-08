@@ -5,8 +5,19 @@
 
 export 'src/auth.dart';
 export 'src/client.dart';
+export 'src/client_identity.dart';
+export 'src/connect_error_details.dart';
+export 'src/device_identity.dart';
+export 'src/device_token_store.dart';
 export 'src/errors.dart';
 export 'src/models.dart';
 export 'src/operator_client.dart';
 export 'src/protocol.dart'
-    show JsonList, JsonMap, defaultOperatorScopes, gatewayProtocolVersion;
+    show
+        JsonList,
+        JsonMap,
+        defaultOperatorScopes,
+        gatewayDefaultRole,
+        gatewayNodeRole,
+        gatewayOperatorRole,
+        gatewayProtocolVersion;

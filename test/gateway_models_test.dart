@@ -47,15 +47,35 @@ void main() {
       uri: Uri.parse('wss://gateway.example'),
       auth: const GatewayAuth.none(),
       clientInfo: const GatewayClientInfo(
-        id: 'gateway-client',
+        id: GatewayClientIds.gatewayClient,
         version: '0.1.0',
         platform: 'dart',
-        mode: 'backend',
+        mode: GatewayClientModes.backend,
       ),
     );
 
     expect(options.role, 'operator');
     expect(options.scopes, contains('operator.read'));
     expect(options.toConnectParams()['minProtocol'], gatewayProtocolVersion);
+  });
+
+  test('exposes canonical gateway client ids and modes', () {
+    expect(GatewayClientIds.values, contains(GatewayClientIds.gatewayClient));
+    expect(GatewayClientIds.values, contains(GatewayClientIds.nodeHost));
+    expect(GatewayClientModes.values, contains(GatewayClientModes.backend));
+    expect(GatewayClientModes.values, contains(GatewayClientModes.node));
+  });
+
+  test('round-trips Ed25519 device identities', () async {
+    final identity = await GatewayEd25519Identity.generate();
+    final exported = await identity.exportData();
+    final restored = GatewayEd25519Identity.fromData(exported);
+
+    expect(restored.deviceId, identity.deviceId);
+    expect(restored.publicKey, identity.publicKey);
+    expect(
+      gatewayDeviceIdFromPublicKey(restored.publicKey),
+      restored.deviceId,
+    );
   });
 }

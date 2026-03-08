@@ -120,6 +120,148 @@ void main() {
       );
     });
 
+    test(
+        'uses device identity with cached device token and persists hello auth',
+        () async {
+      final channel = FakeWebSocketChannel();
+      final identity = await GatewayEd25519Identity.generate();
+      final store = GatewayMemoryDeviceTokenStore();
+      await store.write(
+        GatewayStoredDeviceToken(
+          deviceId: identity.deviceId,
+          role: gatewayDefaultRole,
+          token: 'cached-device-token',
+          scopes: const ['operator.read'],
+        ),
+      );
+
+      final connectFuture = _connectClient(
+        channel,
+        auth: const GatewayAuth.none(),
+        deviceIdentity: identity,
+        deviceTokenStore: store,
+      );
+
+      channel.sendJson(_connectChallengeEvent());
+      final connectRequest = await channel.nextClientJson();
+      final params = Map<String, Object?>.from(connectRequest['params'] as Map);
+      expect(params['auth'], {
+        'token': 'cached-device-token',
+        'deviceToken': 'cached-device-token',
+      });
+      final device = Map<String, Object?>.from(params['device'] as Map);
+      expect(device['id'], identity.deviceId);
+      expect(device['publicKey'], identity.publicKey);
+      expect(device['nonce'], 'nonce-1');
+      expect(device['signature'],
+          isA<String>().having((v) => v.isNotEmpty, 'non-empty', isTrue));
+
+      channel.sendJson({
+        'type': 'res',
+        'id': connectRequest['id'],
+        'ok': true,
+        'payload': _helloPayload(
+          connId: 'conn-identity',
+          deviceToken: 'fresh-device-token',
+          scopes: const ['operator.admin', 'operator.read'],
+        ),
+      });
+
+      final client = await connectFuture;
+      final storedToken = await store.read(
+        deviceId: identity.deviceId,
+        role: gatewayDefaultRole,
+      );
+      expect(storedToken?.token, 'fresh-device-token');
+      expect(storedToken?.scopes, contains('operator.admin'));
+
+      await client.close();
+    });
+
+    test('prefers explicit shared auth over cached device token', () async {
+      final channel = FakeWebSocketChannel();
+      final identity = await GatewayEd25519Identity.generate();
+      final store = GatewayMemoryDeviceTokenStore();
+      await store.write(
+        GatewayStoredDeviceToken(
+          deviceId: identity.deviceId,
+          role: gatewayDefaultRole,
+          token: 'cached-device-token',
+          scopes: const ['operator.read'],
+        ),
+      );
+
+      final connectFuture = _connectClient(
+        channel,
+        auth: const GatewayAuth.token('shared-token'),
+        deviceIdentity: identity,
+        deviceTokenStore: store,
+      );
+
+      channel.sendJson(_connectChallengeEvent());
+      final connectRequest = await channel.nextClientJson();
+      final params = Map<String, Object?>.from(connectRequest['params'] as Map);
+      expect(params['auth'], {
+        'token': 'shared-token',
+      });
+
+      channel.sendJson({
+        'type': 'res',
+        'id': connectRequest['id'],
+        'ok': true,
+        'payload': _helloPayload(connId: 'conn-shared'),
+      });
+
+      final client = await connectFuture;
+      await client.close();
+    });
+
+    test('clears stale stored device token on device token mismatch', () async {
+      final channel = FakeWebSocketChannel();
+      final identity = await GatewayEd25519Identity.generate();
+      final store = GatewayMemoryDeviceTokenStore();
+      await store.write(
+        GatewayStoredDeviceToken(
+          deviceId: identity.deviceId,
+          role: gatewayDefaultRole,
+          token: 'stale-device-token',
+          scopes: const ['operator.read'],
+        ),
+      );
+
+      final connectFuture = _connectClient(
+        channel,
+        auth: const GatewayAuth.none(),
+        deviceIdentity: identity,
+        deviceTokenStore: store,
+      );
+
+      channel.sendJson(_connectChallengeEvent());
+      final connectRequest = await channel.nextClientJson();
+      channel.sendJson({
+        'type': 'res',
+        'id': connectRequest['id'],
+        'ok': false,
+        'error': {
+          'code': 'unauthorized',
+          'message': 'device token mismatch',
+          'details': {
+            'code': GatewayConnectErrorDetailCodes.authDeviceTokenMismatch,
+          },
+        },
+      });
+
+      await expectLater(
+        connectFuture,
+        throwsA(isA<GatewayResponseException>()),
+      );
+      final storedToken = await store.read(
+        deviceId: identity.deviceId,
+        role: gatewayDefaultRole,
+      );
+      expect(storedToken, isNull);
+    });
+
     test('auto reconnects after socket close and future requests wait for it',
         () async {
       final first = FakeWebSocketChannel();
@@ -231,6 +373,17 @@ void main() {
 
 Future<GatewayClient> _connectClient(
   FakeWebSocketChannel channel, {
+  GatewayAuth auth = const GatewayAuth.token('shared-token'),
+  GatewayClientInfo clientInfo = const GatewayClientInfo(
+    id: GatewayClientIds.gatewayClient,
+    version: '0.1.0',
+    platform: 'dart',
+    mode: GatewayClientModes.backend,
+    displayName: 'OpenClaw Dart Test',
+  ),
+  GatewayDeviceIdentity? deviceIdentity,
+  GatewayDeviceTokenStore? deviceTokenStore,
+  String role = gatewayDefaultRole,
   Duration connectChallengeTimeout = const Duration(milliseconds: 100),
   Duration connectResponseTimeout = const Duration(milliseconds: 100),
   Duration requestTimeout = const Duration(milliseconds: 100),
@@ -241,6 +394,11 @@ Future<GatewayClient> _connectClient(
 }) {
   return _connectClientWithFactory(
     channelFactory: (_) => channel,
+    auth: auth,
+    clientInfo: clientInfo,
+    deviceIdentity: deviceIdentity,
+    deviceTokenStore: deviceTokenStore,
+    role: role,
     connectChallengeTimeout: connectChallengeTimeout,
     connectResponseTimeout: connectResponseTimeout,
     requestTimeout: requestTimeout,
@@ -253,6 +411,17 @@ Future<GatewayClient> _connectClient(
 
 Future<GatewayClient> _connectClientWithFactory({
   required GatewayChannelFactory channelFactory,
+  GatewayAuth auth = const GatewayAuth.token('shared-token'),
+  GatewayClientInfo clientInfo = const GatewayClientInfo(
+    id: GatewayClientIds.gatewayClient,
+    version: '0.1.0',
+    platform: 'dart',
+    mode: GatewayClientModes.backend,
+    displayName: 'OpenClaw Dart Test',
+  ),
+  GatewayDeviceIdentity? deviceIdentity,
+  GatewayDeviceTokenStore? deviceTokenStore,
+  String role = gatewayDefaultRole,
   Duration connectChallengeTimeout = const Duration(milliseconds: 100),
   Duration connectResponseTimeout = const Duration(milliseconds: 100),
   Duration requestTimeout = const Duration(milliseconds: 100),
@@ -263,14 +432,11 @@ Future<GatewayClient> _connectClientWithFactory({
 }) {
   return GatewayClient.connect(
     uri: Uri.parse('ws://gateway.test'),
-    auth: const GatewayAuth.token('shared-token'),
-    clientInfo: const GatewayClientInfo(
-      id: 'gateway-client',
-      version: '0.1.0',
-      platform: 'dart',
-      mode: 'backend',
-      displayName: 'OpenClaw Dart Test',
-    ),
+    auth: auth,
+    clientInfo: clientInfo,
+    role: role,
+    deviceIdentity: deviceIdentity,
+    deviceTokenStore: deviceTokenStore,
     connectChallengeTimeout: connectChallengeTimeout,
     connectResponseTimeout: connectResponseTimeout,
     requestTimeout: requestTimeout,
@@ -288,14 +454,7 @@ Future<void> _completeSuccessfulHandshake(
   int tickIntervalMs = 30000,
 }) async {
   await Future<void>.delayed(Duration.zero);
-  channel.sendJson({
-    'type': 'event',
-    'event': 'connect.challenge',
-    'payload': {
-      'nonce': 'nonce-1',
-      'ts': 1,
-    },
-  });
+  channel.sendJson(_connectChallengeEvent());
 
   final connectRequest = await channel.nextClientJson();
   expect(connectRequest['type'], 'req');
@@ -316,6 +475,9 @@ Future<void> _completeSuccessfulHandshake(
 Map<String, Object?> _helloPayload({
   required String connId,
   int tickIntervalMs = 30000,
+  String? deviceToken,
+  String role = gatewayDefaultRole,
+  List<String> scopes = const <String>['operator.read'],
 }) {
   return {
     'type': 'hello-ok',
@@ -331,10 +493,29 @@ Map<String, Object?> _helloPayload({
     'snapshot': {
       'health': {'status': 'ok'},
     },
+    'auth': deviceToken == null
+        ? null
+        : {
+            'deviceToken': deviceToken,
+            'role': role,
+            'scopes': scopes,
+            'issuedAtMs': 1234,
+          },
     'policy': {
       'maxPayload': 1000,
       'maxBufferedBytes': 2000,
       'tickIntervalMs': tickIntervalMs,
+    },
+  };
+}
+
+Map<String, Object?> _connectChallengeEvent() {
+  return {
+    'type': 'event',
+    'event': 'connect.challenge',
+    'payload': {
+      'nonce': 'nonce-1',
+      'ts': 1,
     },
   };
 }

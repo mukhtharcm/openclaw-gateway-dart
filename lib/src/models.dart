@@ -1,4 +1,6 @@
 import 'package:openclaw_gateway/src/auth.dart';
+import 'package:openclaw_gateway/src/device_identity.dart';
+import 'package:openclaw_gateway/src/device_token_store.dart';
 import 'package:openclaw_gateway/src/errors.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
 
@@ -50,8 +52,11 @@ class GatewayConnectOptions {
     List<String>? caps,
     List<String>? commands,
     Map<String, bool>? permissions,
+    this.pathEnv,
     this.locale,
     this.userAgent,
+    this.deviceIdentity,
+    this.deviceTokenStore,
     this.connectChallengeTimeout = const Duration(seconds: 6),
     this.connectResponseTimeout = const Duration(seconds: 12),
     this.requestTimeout = const Duration(seconds: 15),
@@ -73,8 +78,11 @@ class GatewayConnectOptions {
     required GatewayClientInfo clientInfo,
     List<String>? scopes,
     List<String>? caps,
+    String? pathEnv,
     String? locale,
     String? userAgent,
+    GatewayDeviceIdentity? deviceIdentity,
+    GatewayDeviceTokenStore? deviceTokenStore,
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
@@ -92,8 +100,11 @@ class GatewayConnectOptions {
       role: gatewayDefaultRole,
       scopes: scopes ?? defaultOperatorScopes,
       caps: caps,
+      pathEnv: pathEnv,
       locale: locale,
       userAgent: userAgent,
+      deviceIdentity: deviceIdentity,
+      deviceTokenStore: deviceTokenStore,
       connectChallengeTimeout: connectChallengeTimeout,
       connectResponseTimeout: connectResponseTimeout,
       requestTimeout: requestTimeout,
@@ -114,8 +125,11 @@ class GatewayConnectOptions {
   final List<String> caps;
   final List<String> commands;
   final Map<String, bool> permissions;
+  final String? pathEnv;
   final String? locale;
   final String? userAgent;
+  final GatewayDeviceIdentity? deviceIdentity;
+  final GatewayDeviceTokenStore? deviceTokenStore;
   final Duration connectChallengeTimeout;
   final Duration connectResponseTimeout;
   final Duration requestTimeout;
@@ -135,6 +149,7 @@ class GatewayConnectOptions {
       'caps': caps.isEmpty ? null : caps,
       'commands': commands.isEmpty ? null : commands,
       'permissions': permissions.isEmpty ? null : permissions,
+      'pathEnv': pathEnv,
       'role': role,
       'scopes': scopes.isEmpty ? null : scopes,
       'auth': auth.toJson(),

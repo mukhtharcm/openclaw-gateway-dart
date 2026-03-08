@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:openclaw_gateway/src/auth.dart';
+import 'package:openclaw_gateway/src/connect_error_details.dart';
+import 'package:openclaw_gateway/src/connect_payload.dart';
+import 'package:openclaw_gateway/src/device_identity.dart';
+import 'package:openclaw_gateway/src/device_token_store.dart';
 import 'package:openclaw_gateway/src/errors.dart';
 import 'package:openclaw_gateway/src/models.dart';
 import 'package:openclaw_gateway/src/operator_client.dart';
@@ -35,8 +39,11 @@ class GatewayClient {
     List<String>? caps,
     List<String>? commands,
     Map<String, bool>? permissions,
+    String? pathEnv,
     String? locale,
     String? userAgent,
+    GatewayDeviceIdentity? deviceIdentity,
+    GatewayDeviceTokenStore? deviceTokenStore,
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
@@ -58,8 +65,11 @@ class GatewayClient {
         caps: caps,
         commands: commands,
         permissions: permissions,
+        pathEnv: pathEnv,
         locale: locale,
         userAgent: userAgent,
+        deviceIdentity: deviceIdentity,
+        deviceTokenStore: deviceTokenStore,
         connectChallengeTimeout: connectChallengeTimeout,
         connectResponseTimeout: connectResponseTimeout,
         requestTimeout: requestTimeout,
@@ -116,6 +126,7 @@ class GatewayClient {
   Timer? _reconnectTimer;
   Timer? _tickWatchTimer;
   DateTime? _lastTickAt;
+  GatewayPreparedConnectParams? _preparedConnectParams;
 
   Stream<GatewayEventFrame> get events => _eventsController.stream;
 
@@ -278,9 +289,15 @@ class GatewayClient {
         ),
       );
 
+      final preparedConnectParams = await prepareGatewayConnectParams(
+        options: options,
+        nonce: nonce,
+      );
+      _preparedConnectParams = preparedConnectParams;
+
       final response = await _dispatchRequest(
         method: 'connect',
-        params: _buildConnectParams(nonce),
+        params: preparedConnectParams.params,
         timeout: options.connectResponseTimeout,
       );
       if (!response.ok) {
@@ -298,6 +315,7 @@ class GatewayClient {
       _everConnected = true;
       _reconnectAttempt = 0;
       _lastTickAt = DateTime.now();
+      await _persistHelloAuth(hello);
       _completeReady();
       _startTickWatch();
       _emitConnectionState(
@@ -313,6 +331,7 @@ class GatewayClient {
               'Failed to connect to ${options.uri}.',
               cause: error,
             );
+      await _clearStaleDeviceTokenIfNeeded(error: wrapped);
       _disconnectGeneration = generation;
       await _closeCurrentTransport(closeCode: 1008, reason: wrapped.message);
       _completeChallengeError(wrapped);
@@ -321,14 +340,6 @@ class GatewayClient {
       }
       throw wrapped;
     }
-  }
-
-  JsonMap _buildConnectParams(String nonce) {
-    final params = options.toConnectParams();
-    if (nonce.isEmpty) {
-      throw GatewayProtocolException('Gateway connect nonce was empty.');
-    }
-    return params;
   }
 
   Future<void> _waitUntilReadyForRequest() async {
@@ -456,9 +467,23 @@ class GatewayClient {
   }
 
   void _handleSocketDone(int generation) {
-    final error =
-        _terminalError ?? GatewayClosedException('Gateway socket closed.');
-    unawaited(_handleDisconnect(error, generation: generation));
+    final channel = _channel;
+    final closeCode = channel?.closeCode;
+    final closeReason = channel?.closeReason;
+    final error = _terminalError ??
+        GatewayClosedException(
+          closeReason == null || closeReason.isEmpty
+              ? 'Gateway socket closed.'
+              : 'Gateway socket closed: $closeReason',
+        );
+    unawaited(
+      _handleDisconnect(
+        error,
+        generation: generation,
+        closeCode: closeCode,
+        reason: closeReason,
+      ),
+    );
   }
 
   Future<void> _handleDisconnect(
@@ -483,6 +508,11 @@ class GatewayClient {
     _lastTickAt = null;
     _cancelTickWatch();
     _failPendingResponses(error);
+    await _clearStaleDeviceTokenIfNeeded(
+      error: error,
+      closeCode: closeCode,
+      reason: reason,
+    );
     await _closeCurrentTransport(closeCode: closeCode, reason: reason);
 
     if (shouldReconnect) {
@@ -758,5 +788,61 @@ class GatewayClient {
     if (!_connectionStatesController.isClosed) {
       await _connectionStatesController.close();
     }
+  }
+
+  Future<void> _persistHelloAuth(GatewayHelloOk hello) async {
+    final auth = hello.auth;
+    final deviceIdentity = options.deviceIdentity;
+    final deviceTokenStore = options.deviceTokenStore;
+    if (auth == null || deviceIdentity == null || deviceTokenStore == null) {
+      return;
+    }
+
+    await deviceTokenStore.write(
+      GatewayStoredDeviceToken(
+        deviceId: deviceIdentity.deviceId,
+        role: auth.role,
+        token: auth.deviceToken,
+        scopes: auth.scopes,
+        issuedAtMs: auth.issuedAtMs,
+      ),
+    );
+  }
+
+  Future<void> _clearStaleDeviceTokenIfNeeded({
+    GatewayException? error,
+    int? closeCode,
+    String? reason,
+  }) async {
+    final preparedConnectParams = _preparedConnectParams;
+    final deviceIdentity = options.deviceIdentity;
+    final deviceTokenStore = options.deviceTokenStore;
+    if (preparedConnectParams == null ||
+        !preparedConnectParams.usesDeviceTokenOnly ||
+        deviceIdentity == null ||
+        deviceTokenStore == null) {
+      return;
+    }
+
+    final detailCode = error is GatewayResponseException
+        ? readGatewayConnectErrorDetailCode(error.details)
+        : null;
+    final normalizedReason = reason?.toLowerCase();
+    final normalizedMessage = error?.message.toLowerCase();
+    final looksLikeDeviceTokenMismatch =
+        detailCode == GatewayConnectErrorDetailCodes.authDeviceTokenMismatch ||
+            (closeCode == 1008 &&
+                normalizedReason != null &&
+                normalizedReason.contains('device token mismatch')) ||
+            (normalizedMessage != null &&
+                normalizedMessage.contains('device token mismatch'));
+    if (!looksLikeDeviceTokenMismatch) {
+      return;
+    }
+
+    await deviceTokenStore.delete(
+      deviceId: deviceIdentity.deviceId,
+      role: options.role,
+    );
   }
 }
