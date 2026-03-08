@@ -7,8 +7,9 @@ void main() {
     await tester.pumpWidget(const GatewayExampleApp());
 
     expect(find.text('OpenClaw Gateway Example'), findsOneWidget);
-    expect(find.text('Gateway URL'), findsOneWidget);
-    expect(find.text('Gateway Token'), findsOneWidget);
-    expect(find.text('Connect'), findsOneWidget);
+    expect(find.text('Overview'), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
+    expect(find.text('Explore'), findsOneWidget);
+    expect(find.text('Events'), findsOneWidget);
   });
 }
