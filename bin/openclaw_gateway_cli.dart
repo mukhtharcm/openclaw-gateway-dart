@@ -49,6 +49,12 @@ Future<void> main(List<String> arguments) async {
       case 'help':
         _handleHelp(parser, command);
         return;
+      case 'discover':
+        await _runDiscoverCommand(args, command);
+        return;
+      case 'tls-probe':
+        await _runTlsProbeCommand(args, command);
+        return;
       case 'events':
         await _runEventsCommand(args, command);
         return;
@@ -147,6 +153,26 @@ ArgParser _buildParser() {
       help: 'Show usage.',
     );
 
+  parser.addCommand(
+    'discover',
+    ArgParser()
+      ..addOption(
+        'service-name',
+        defaultsTo: gatewayDiscoveryLocalServiceName,
+        help: 'Bonjour service name to query.',
+      )
+      ..addOption(
+        'timeout-ms',
+        valueHelp: 'n',
+        help: 'mDNS lookup timeout in milliseconds.',
+      )
+      ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.'),
+  );
+  parser.addCommand(
+    'tls-probe',
+    ArgParser()
+      ..addFlag('help', abbr: 'h', negatable: false, help: 'Show usage.'),
+  );
   parser.addCommand(
     'health',
     ArgParser()
@@ -318,6 +344,53 @@ void _handleHelp(ArgParser parser, ArgResults command) {
     return;
   }
   _printCommandUsage(parser, target, stdout);
+}
+
+Future<void> _runDiscoverCommand(
+  ArgResults globalArgs,
+  ArgResults command,
+) async {
+  final output = _JsonPrinter(globalArgs.flag('pretty'));
+  final client = GatewayMdnsDiscoveryClient();
+  final gateways = await client.discoverOnce(
+    options: GatewayDiscoveryOptions(
+      serviceName:
+          command.option('service-name') ?? gatewayDiscoveryLocalServiceName,
+      timeout: Duration(
+        milliseconds: _readIntOption(command, 'timeout-ms') ?? 2000,
+      ),
+    ),
+  );
+  output.writeJson(
+    <String, Object?>{
+      'gateways':
+          gateways.map(_discoveredGatewayToJson).toList(growable: false),
+    },
+  );
+}
+
+Future<void> _runTlsProbeCommand(
+  ArgResults globalArgs,
+  ArgResults command,
+) async {
+  final output = _JsonPrinter(globalArgs.flag('pretty'));
+  final env = Platform.environment;
+  final rawUrl = command.rest.isNotEmpty
+      ? command.rest.first
+      : _readGlobalValue(globalArgs, env, 'url', 'OPENCLAW_GATEWAY_URL');
+  if (rawUrl == null || rawUrl.trim().isEmpty) {
+    throw const _CliUsageException(
+      'tls-probe requires a URL argument or --url.',
+    );
+  }
+  final uri = Uri.parse(rawUrl);
+  final fingerprint = await GatewayTlsProbe.probeFingerprint(uri);
+  output.writeJson(
+    <String, Object?>{
+      'url': uri.toString(),
+      'fingerprint': fingerprint,
+    },
+  );
 }
 
 Future<void> _runRpcCommand(ArgResults globalArgs, ArgResults command) async {
@@ -759,6 +832,10 @@ void _printUsage(
   sink.writeln(parser.usage);
   sink.writeln('');
   sink.writeln('Examples:');
+  sink.writeln('  dart run openclaw_gateway:openclaw_gateway_cli discover');
+  sink.writeln(
+    '  dart run openclaw_gateway:openclaw_gateway_cli tls-probe wss://gateway.example',
+  );
   sink.writeln('  dart run openclaw_gateway:openclaw_gateway_cli health');
   sink.writeln(
     '  dart run openclaw_gateway:openclaw_gateway_cli sessions-list --limit 10',
@@ -796,6 +873,12 @@ void _printCommandUsage(ArgParser parser, String commandName, IOSink sink) {
   sink.writeln('');
   sink.writeln('Usage:');
   switch (commandName) {
+    case 'discover':
+      sink.writeln('  ... discover [--service-name _openclaw-gw._tcp.local]');
+      break;
+    case 'tls-probe':
+      sink.writeln('  ... tls-probe <wss-url>');
+      break;
     case 'health':
       sink.writeln('  ... health [--probe]');
       break;
@@ -869,6 +952,25 @@ JsonMap? _coerceJsonMap(Object? value) {
     return Map<String, Object?>.from(value);
   }
   return null;
+}
+
+Map<String, Object?> _discoveredGatewayToJson(
+    GatewayDiscoveredGateway gateway) {
+  return <String, Object?>{
+    'instanceName': gateway.instanceName,
+    'displayName': gateway.displayName,
+    'targetHost': gateway.targetHost,
+    'port': gateway.port,
+    'tlsEnabled': gateway.tlsEnabled,
+    'stableId': gateway.stableId,
+    'txt': gateway.txt,
+    'ipv4': gateway.ipv4.map((entry) => entry.address).toList(growable: false),
+    'ipv6': gateway.ipv6.map((entry) => entry.address).toList(growable: false),
+    'candidateUris': gateway
+        .candidateUris()
+        .map((entry) => entry.toString())
+        .toList(growable: false),
+  };
 }
 
 String? _extractChatMessageText(Object? value) {

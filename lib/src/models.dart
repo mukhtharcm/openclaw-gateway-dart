@@ -3,6 +3,7 @@ import 'package:openclaw_gateway/src/device_identity.dart';
 import 'package:openclaw_gateway/src/device_token_store.dart';
 import 'package:openclaw_gateway/src/errors.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
+import 'package:openclaw_gateway/src/tls.dart';
 
 /// Describes the client identity sent to the gateway during `connect`.
 class GatewayClientInfo {
@@ -57,6 +58,7 @@ class GatewayConnectOptions {
     this.userAgent,
     this.deviceIdentity,
     this.deviceTokenStore,
+    this.tlsPolicy,
     this.connectChallengeTimeout = const Duration(seconds: 6),
     this.connectResponseTimeout = const Duration(seconds: 12),
     this.requestTimeout = const Duration(seconds: 15),
@@ -83,6 +85,7 @@ class GatewayConnectOptions {
     String? userAgent,
     GatewayDeviceIdentity? deviceIdentity,
     GatewayDeviceTokenStore? deviceTokenStore,
+    GatewayTlsPolicy? tlsPolicy,
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
@@ -105,6 +108,7 @@ class GatewayConnectOptions {
       userAgent: userAgent,
       deviceIdentity: deviceIdentity,
       deviceTokenStore: deviceTokenStore,
+      tlsPolicy: tlsPolicy,
       connectChallengeTimeout: connectChallengeTimeout,
       connectResponseTimeout: connectResponseTimeout,
       requestTimeout: requestTimeout,
@@ -130,6 +134,7 @@ class GatewayConnectOptions {
     String? userAgent,
     GatewayDeviceIdentity? deviceIdentity,
     GatewayDeviceTokenStore? deviceTokenStore,
+    GatewayTlsPolicy? tlsPolicy,
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
@@ -154,6 +159,7 @@ class GatewayConnectOptions {
       userAgent: userAgent,
       deviceIdentity: deviceIdentity,
       deviceTokenStore: deviceTokenStore,
+      tlsPolicy: tlsPolicy,
       connectChallengeTimeout: connectChallengeTimeout,
       connectResponseTimeout: connectResponseTimeout,
       requestTimeout: requestTimeout,
@@ -179,6 +185,7 @@ class GatewayConnectOptions {
   final String? userAgent;
   final GatewayDeviceIdentity? deviceIdentity;
   final GatewayDeviceTokenStore? deviceTokenStore;
+  final GatewayTlsPolicy? tlsPolicy;
   final Duration connectChallengeTimeout;
   final Duration connectResponseTimeout;
   final Duration requestTimeout;

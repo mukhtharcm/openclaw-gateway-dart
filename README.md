@@ -31,14 +31,17 @@ Included today:
 - operator-side node and device helpers
 - public node capability registry and invoke router helpers
 - node-role helpers for invoke requests, invoke results, node events, and canvas capability refresh
+- local Bonjour/mDNS gateway discovery helpers
+- TLS fingerprint probing, pinning, and TOFU helpers on `dart:io` platforms
+- generated protocol DTOs mirrored from the upstream OpenClaw schema bundle
 - generated contract metadata for protocol version, method names, event names, client ids, modes, and caps
 - sample CLI executable for local testing
 
 Not included yet:
 
-- gateway discovery
-- TLS pinning / TOFU helpers
-- full generated request/response DTOs from the upstream TypeScript schema
+- built-in Flutter secure-storage adapters
+- wide-area/Tailscale DNS-SD helpers
+- web-specific TLS pinning helpers
 
 ## Install
 
@@ -184,8 +187,55 @@ More docs:
 
 - [doc/flutter.md](doc/flutter.md)
 - [doc/cli.md](doc/cli.md)
+- [doc/discovery.md](doc/discovery.md)
+- [doc/tls.md](doc/tls.md)
 - [doc/device-auth.md](doc/device-auth.md)
 - [doc/node.md](doc/node.md)
+
+## Discovery
+
+Local Bonjour/mDNS discovery is available through `GatewayMdnsDiscoveryClient`.
+The SDK resolves routing from PTR/SRV/A/AAAA records and treats TXT as hints
+only, matching the OpenClaw discovery trust model.
+
+```dart
+final discovery = GatewayMdnsDiscoveryClient();
+final gateways = await discovery.discoverOnce();
+
+for (final gateway in gateways) {
+  print(gateway.displayName);
+  print(gateway.primaryUri);
+}
+```
+
+## TLS Pinning And TOFU
+
+For `wss://` connections on `dart:io` platforms, the SDK can:
+
+- probe the presented certificate fingerprint
+- pin to an expected fingerprint
+- trust-on-first-use and persist the stored fingerprint
+
+```dart
+final uri = Uri.parse('wss://gateway.example');
+final fingerprint = await GatewayTlsProbe.probeFingerprint(uri);
+
+final client = await GatewayClient.connect(
+  uri: uri,
+  auth: const GatewayAuth.token('gateway-shared-token'),
+  tlsPolicy: GatewayTlsPolicy.pinned(fingerprint!),
+  clientInfo: const GatewayClientInfo(
+    id: GatewayClientIds.gatewayClient,
+    version: '0.1.0',
+    platform: 'dart',
+    mode: GatewayClientModes.backend,
+  ),
+);
+```
+
+If you want one persisted blob for device identities, device tokens, and TLS
+fingerprints together, `GatewayJsonAuthStateStore` and
+`GatewayJsonFileAuthStateStore` now implement all three store interfaces.
 
 ## Device Auth
 
@@ -225,6 +275,31 @@ If you want one persisted blob for both identity and device tokens, use
 Use `client.devices.pairList()`, `client.devices.pairApprove(...)`, and
 `client.devices.pairReject(...)` to build the operator-side pairing flow.
 
+## Generated DTOs
+
+The package now exports schema-mirrored DTOs like `GatewaySchemaHelloOk`,
+`GatewaySchemaConnectParams`, and `GatewaySchemaChatSendParams`. These are
+generated from OpenClaw's exported protocol schema with
+`tool/sync_openclaw_protocol_dtos.dart`.
+
+They live alongside the curated manual models already used by the high-level
+query/admin/operator clients:
+
+```dart
+final dto = GatewaySchemaConnectParams.fromJson({
+  'minProtocol': gatewayProtocolVersion,
+  'maxProtocol': gatewayProtocolVersion,
+  'client': {
+    'id': GatewayClientIds.cli,
+    'version': '0.1.0',
+    'platform': 'dart',
+    'mode': GatewayClientModes.cli,
+  },
+});
+
+print(dto.client.id);
+```
+
 ## Node APIs
 
 Operator-side node management:
@@ -258,6 +333,12 @@ await for (final request in client.node.invokeRequests) {
 The package ships generated contract metadata in `GatewayMethodNames`,
 `GatewayEventNames`, `GatewayClientIds`, `GatewayClientModes`, and
 `GatewayClientCaps`.
+
+Protocol DTOs are generated separately with:
+
+```sh
+dart run tool/sync_openclaw_protocol_dtos.dart
+```
 
 To refresh the generated metadata from an OpenClaw checkout:
 

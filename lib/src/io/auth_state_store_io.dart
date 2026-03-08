@@ -5,10 +5,11 @@ import 'package:openclaw_gateway/src/device_identity.dart';
 import 'package:openclaw_gateway/src/device_token_store.dart';
 import 'package:openclaw_gateway/src/identity_store.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
+import 'package:openclaw_gateway/src/tls.dart';
 
 /// JSON file-backed persistence for a gateway device identity plus device tokens.
 class GatewayJsonFileAuthStateStore extends GatewayEd25519IdentityStore
-    implements GatewayDeviceTokenStore {
+    implements GatewayDeviceTokenStore, GatewayTlsFingerprintStore {
   GatewayJsonFileAuthStateStore({
     required String path,
   }) : _file = File(path);
@@ -23,6 +24,17 @@ class GatewayJsonFileAuthStateStore extends GatewayEd25519IdentityStore
     final state = await _load();
     state.tokens.removeWhere(
       (token) => token.deviceId == deviceId && token.role == role,
+    );
+    await _persist(state);
+  }
+
+  @override
+  Future<void> deleteFingerprint({
+    required String stableId,
+  }) async {
+    final state = await _load();
+    state.tlsFingerprints.removeWhere(
+      (fingerprint) => fingerprint.stableId == stableId,
     );
     await _persist(state);
   }
@@ -49,6 +61,19 @@ class GatewayJsonFileAuthStateStore extends GatewayEd25519IdentityStore
   }
 
   @override
+  Future<GatewayStoredTlsFingerprint?> readFingerprint({
+    required String stableId,
+  }) async {
+    final state = await _load();
+    for (final fingerprint in state.tlsFingerprints) {
+      if (fingerprint.stableId == stableId) {
+        return fingerprint;
+      }
+    }
+    return null;
+  }
+
+  @override
   Future<GatewayEd25519Identity?> readIdentity() async {
     final state = await _load();
     final identity = state.identity;
@@ -66,6 +91,16 @@ class GatewayJsonFileAuthStateStore extends GatewayEd25519IdentityStore
           existing.deviceId == token.deviceId && existing.role == token.role,
     );
     state.tokens.add(token);
+    await _persist(state);
+  }
+
+  @override
+  Future<void> writeFingerprint(GatewayStoredTlsFingerprint fingerprint) async {
+    final state = await _load();
+    state.tlsFingerprints.removeWhere(
+      (existing) => existing.stableId == fingerprint.stableId,
+    );
+    state.tlsFingerprints.add(fingerprint);
     await _persist(state);
   }
 
@@ -97,11 +132,13 @@ class _GatewayJsonFileAuthState {
   _GatewayJsonFileAuthState({
     this.identity,
     this.tokens = const <GatewayStoredDeviceToken>[],
+    this.tlsFingerprints = const <GatewayStoredTlsFingerprint>[],
   });
 
   factory _GatewayJsonFileAuthState.fromJson(JsonMap json) {
     final identityValue = json['identity'];
     final tokensValue = json['tokens'];
+    final tlsValue = json['tlsFingerprints'];
     return _GatewayJsonFileAuthState(
       identity: identityValue == null
           ? null
@@ -124,16 +161,35 @@ class _GatewayJsonFileAuthState {
                     ),
                   ))
               .toList(growable: true),
+      tlsFingerprints: tlsValue == null
+          ? const <GatewayStoredTlsFingerprint>[]
+          : asJsonList(
+              tlsValue,
+              context: 'GatewayJsonFileAuthStateStore.tlsFingerprints',
+            )
+              .map(
+                (entry) => gatewayStoredTlsFingerprintFromJson(
+                  asJsonMap(
+                    entry,
+                    context: 'GatewayJsonFileAuthStateStore.tlsFingerprints[]',
+                  ),
+                ),
+              )
+              .toList(growable: true),
     );
   }
 
   GatewayEd25519IdentityData? identity;
   final List<GatewayStoredDeviceToken> tokens;
+  final List<GatewayStoredTlsFingerprint> tlsFingerprints;
 
   JsonMap toJson() {
     return <String, Object?>{
       'identity': identity?.toJson(),
       'tokens': tokens.map(_storedDeviceTokenToJson).toList(growable: false),
+      'tlsFingerprints': tlsFingerprints
+          .map(gatewayStoredTlsFingerprintToJson)
+          .toList(growable: false),
     };
   }
 }

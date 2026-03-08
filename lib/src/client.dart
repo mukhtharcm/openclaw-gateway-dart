@@ -16,10 +16,15 @@ import 'package:openclaw_gateway/src/nodes_client.dart';
 import 'package:openclaw_gateway/src/operator_client.dart';
 import 'package:openclaw_gateway/src/query_client.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
+import 'package:openclaw_gateway/src/tls.dart';
+import 'package:openclaw_gateway/src/transport_stub.dart'
+    if (dart.library.io) 'package:openclaw_gateway/src/io/transport_io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// Factory for constructing the underlying WebSocket channel.
-typedef GatewayChannelFactory = WebSocketChannel Function(Uri uri);
+typedef GatewayChannelFactory = FutureOr<WebSocketChannel> Function(Uri uri);
+
+const int _gatewayClientProtocolCloseCode = 4008;
 
 /// High-level OpenClaw gateway client.
 ///
@@ -29,7 +34,7 @@ class GatewayClient {
   GatewayClient._(
     this.options, {
     GatewayChannelFactory? channelFactory,
-  }) : _channelFactory = channelFactory ?? WebSocketChannel.connect {
+  }) : _channelFactory = channelFactory {
     _resetReadyCompleter();
     _resetChallengeCompleter();
   }
@@ -49,6 +54,7 @@ class GatewayClient {
     String? userAgent,
     GatewayDeviceIdentity? deviceIdentity,
     GatewayDeviceTokenStore? deviceTokenStore,
+    GatewayTlsPolicy? tlsPolicy,
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
@@ -75,6 +81,7 @@ class GatewayClient {
         userAgent: userAgent,
         deviceIdentity: deviceIdentity,
         deviceTokenStore: deviceTokenStore,
+        tlsPolicy: tlsPolicy,
         connectChallengeTimeout: connectChallengeTimeout,
         connectResponseTimeout: connectResponseTimeout,
         requestTimeout: requestTimeout,
@@ -102,7 +109,7 @@ class GatewayClient {
   }
 
   final GatewayConnectOptions options;
-  final GatewayChannelFactory _channelFactory;
+  final GatewayChannelFactory? _channelFactory;
   final StreamController<GatewayEventFrame> _eventsController =
       StreamController<GatewayEventFrame>.broadcast();
   final StreamController<GatewayIncomingRequestFrame> _requestsController =
@@ -283,7 +290,12 @@ class GatewayClient {
     final generation = ++_connectionGeneration;
     _disconnectGeneration = null;
 
-    final channel = _channelFactory(options.uri);
+    final channel = await (_channelFactory?.call(options.uri) ??
+        openGatewayWebSocketChannel(
+          uri: options.uri,
+          connectTimeout: options.connectResponseTimeout,
+          tlsPolicy: options.tlsPolicy,
+        ));
     _channel = channel;
     _subscription = channel.stream.listen(
       (data) => _handleSocketMessage(data, generation),
@@ -353,7 +365,10 @@ class GatewayClient {
             );
       await _clearStaleDeviceTokenIfNeeded(error: wrapped);
       _disconnectGeneration = generation;
-      await _closeCurrentTransport(closeCode: 1008, reason: wrapped.message);
+      await _closeCurrentTransport(
+        closeCode: _gatewayClientProtocolCloseCode,
+        reason: wrapped.message,
+      );
       _completeChallengeError(wrapped);
       if (!isReconnect) {
         _completeReadyError(wrapped);
@@ -851,6 +866,9 @@ class GatewayClient {
     final normalizedMessage = error?.message.toLowerCase();
     final looksLikeDeviceTokenMismatch =
         detailCode == GatewayConnectErrorDetailCodes.authDeviceTokenMismatch ||
+            (closeCode == _gatewayClientProtocolCloseCode &&
+                normalizedReason != null &&
+                normalizedReason.contains('device token mismatch')) ||
             (closeCode == 1008 &&
                 normalizedReason != null &&
                 normalizedReason.contains('device token mismatch')) ||

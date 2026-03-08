@@ -45,6 +45,8 @@ export OPENCLAW_GATEWAY_TOKEN='gateway-shared-token'
 
 ## Commands
 
+- `discover`
+- `tls-probe`
 - `health`
 - `status`
 - `config-get`
@@ -63,6 +65,8 @@ export OPENCLAW_GATEWAY_TOKEN='gateway-shared-token'
 ## Examples
 
 ```sh
+dart run openclaw_gateway:openclaw_gateway_cli discover
+dart run openclaw_gateway:openclaw_gateway_cli tls-probe wss://gateway.example
 dart run openclaw_gateway:openclaw_gateway_cli health
 dart run openclaw_gateway:openclaw_gateway_cli sessions-list --limit 10
 dart run openclaw_gateway:openclaw_gateway_cli chat-history main --limit 20
@@ -77,6 +81,8 @@ echo '{"probe":true}' | dart run openclaw_gateway:openclaw_gateway_cli raw healt
 
 ## Notes
 
+- `discover` uses the local Bonjour/mDNS helper and prints candidate gateway URIs.
+- `tls-probe` prints the currently presented TLS fingerprint for a `wss://` endpoint.
 - `chat-send` returns the gateway acknowledgement payload.
 - `chat-watch` sends the request, listens for matching `chat` events, and stops
   when the final event arrives.

@@ -10,8 +10,10 @@ WebSocket code.
 ## What Works Well Today
 
 - connecting to a known gateway URL
+- local gateway discovery over Bonjour/mDNS
 - token or password authentication
 - device identity and cached device-token auth
+- TLS fingerprint probing, pinning, and TOFU on `dart:io` platforms
 - request/response gateway methods
 - typed query/admin clients
 - typed config/session mutation helpers
@@ -29,10 +31,10 @@ gateway before building your own app shell.
 
 ## What Is Not Included Yet
 
-- gateway discovery
 - built-in secure storage plugin adapters
-- TLS pinning or TOFU helpers
 - opinionated storage adapters for device identities and device tokens
+- wide-area/Tailscale discovery helpers
+- web-specific TLS pinning helpers
 
 ## Basic Client Setup
 
@@ -143,8 +145,44 @@ final authState = GatewayJsonAuthStateStore(
 );
 ```
 
-That store can back both device identities and cached device tokens for the
-core package.
+That store can back device identities, cached device tokens, and TLS
+fingerprints for the core package.
+
+## Discovery
+
+For desktop or local-network mobile flows, you can discover gateways first and
+then connect to the chosen `primaryUri`:
+
+```dart
+final discovery = GatewayMdnsDiscoveryClient();
+final gateways = await discovery.discoverOnce();
+final gateway = gateways.first;
+```
+
+## TLS Pinning And TOFU
+
+For `wss://` gateways on Flutter desktop or mobile `dart:io` runtimes:
+
+```dart
+final store = GatewayJsonAuthStateStore(
+  store: SecureStorageStringStore(const FlutterSecureStorage()),
+);
+
+final client = await GatewayClient.connect(
+  uri: Uri.parse('wss://gateway.example'),
+  auth: const GatewayAuth.token('gateway-shared-token'),
+  tlsPolicy: GatewayTlsPolicy.trustOnFirstUse(
+    stableId: 'gateway.example',
+    fingerprintStore: store,
+  ),
+  clientInfo: const GatewayClientInfo(
+    id: GatewayClientIds.gatewayClient,
+    version: '0.1.0',
+    platform: 'flutter',
+    mode: GatewayClientModes.ui,
+  ),
+);
+```
 
 ## Node-Aware Apps
 
@@ -171,7 +209,7 @@ on top of this package for:
 - app lifecycle integration
 - user-facing connection state
 - mapping raw chat events into UI state
-- gateway discovery and trust UX
+- discovery and trust UX
 
 ## Contract Metadata
 

@@ -20,6 +20,12 @@
   capability refresh.
 - Added portable auth-state stores backed by `GatewayStringStore` or
   `dart:io` JSON files for device identities and cached device tokens.
+- Added local Bonjour/mDNS gateway discovery helpers, CLI discovery support,
+  and discovery docs for `dart:io` platforms.
+- Added TLS fingerprint probing, pinning, TOFU helpers, and persisted
+  fingerprint storage support for `wss://` connections on `dart:io`.
+- Added schema-driven generated Dart DTOs plus a sync tool that regenerates
+  protocol models from the upstream OpenClaw JSON schema output.
 - Added typed CLI helpers for `nodes-list`, `node-describe`, and `node-invoke`,
   plus a dedicated sample node-host executable with persisted identity/token
   state and optional pairing approval.

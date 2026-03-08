@@ -12,11 +12,15 @@ export 'src/client.dart';
 export 'src/client_identity.dart';
 export 'src/contract.dart';
 export 'src/connect_error_details.dart';
+export 'src/discovery_models.dart';
+export 'src/discovery_stub.dart'
+    if (dart.library.io) 'src/io/discovery_io.dart';
 export 'src/devices_client.dart';
 export 'src/device_identity.dart';
 export 'src/device_token_store.dart';
 export 'src/event_models.dart';
 export 'src/errors.dart';
+export 'src/generated_protocol_dtos.dart';
 export 'src/identity_store.dart';
 export 'src/models.dart';
 export 'src/mutation_models.dart';
@@ -27,6 +31,9 @@ export 'src/nodes_client.dart';
 export 'src/operator_client.dart';
 export 'src/query_client.dart';
 export 'src/query_models.dart';
+export 'src/tls.dart';
+export 'src/tls_probe_stub.dart'
+    if (dart.library.io) 'src/io/tls_probe_io.dart';
 export 'src/protocol.dart'
     show
         JsonList,
