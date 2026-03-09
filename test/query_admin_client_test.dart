@@ -83,6 +83,38 @@ void main() {
       expect(sessions.count, 1);
       expect(sessions.sessions.single.key, 'main');
 
+      final chatHistoryFuture = client.query.chatHistory(
+        sessionKey: 'main',
+        limit: 12,
+      );
+      final chatHistoryRequest = await channel.nextClientJson();
+      expect(chatHistoryRequest['method'], 'chat.history');
+      channel.sendJson({
+        'type': 'res',
+        'id': chatHistoryRequest['id'],
+        'ok': true,
+        'payload': {
+          'sessionKey': 'main',
+          'sessionId': 'session-1',
+          'thinkingLevel': 'medium',
+          'messages': [
+            {
+              'role': 'assistant',
+              'timestamp': 1234,
+              'content': [
+                {
+                  'type': 'text',
+                  'text': 'Hello from the gateway',
+                },
+              ],
+            },
+          ],
+        },
+      });
+      final chatHistory = await chatHistoryFuture;
+      expect(chatHistory.sessionId, 'session-1');
+      expect(chatHistory.messages.single.primaryText, 'Hello from the gateway');
+
       final lookupFuture =
           client.query.configSchemaLookup(path: 'gateway.mode');
       final lookupRequest = await channel.nextClientJson();
@@ -255,6 +287,46 @@ void main() {
       final configPatch = await configPatchFuture;
       expect(configPatch.restart?.signal, 'SIGUSR1');
       expect(configPatch.sentinel?.path, '/tmp/restart-sentinel.json');
+
+      final chatSendFuture = client.admin.chatSend(
+        sessionKey: 'main',
+        message: 'hello',
+        thinking: 'medium',
+      );
+      final chatSendRequest = await channel.nextClientJson();
+      expect(chatSendRequest['method'], 'chat.send');
+      channel.sendJson({
+        'type': 'res',
+        'id': chatSendRequest['id'],
+        'ok': true,
+        'payload': {
+          'runId': 'run-1',
+          'status': 'started',
+        },
+      });
+      final chatSend = await chatSendFuture;
+      expect(chatSend.runId, 'run-1');
+      expect(chatSend.status, 'started');
+
+      final chatAbortFuture = client.admin.chatAbort(
+        sessionKey: 'main',
+        runId: 'run-1',
+      );
+      final chatAbortRequest = await channel.nextClientJson();
+      expect(chatAbortRequest['method'], 'chat.abort');
+      channel.sendJson({
+        'type': 'res',
+        'id': chatAbortRequest['id'],
+        'ok': true,
+        'payload': {
+          'ok': true,
+          'aborted': true,
+          'runIds': ['run-1'],
+        },
+      });
+      final chatAbort = await chatAbortFuture;
+      expect(chatAbort.aborted, isTrue);
+      expect(chatAbort.runIds, ['run-1']);
 
       final sessionPatchFuture = client.admin.sessionsPatch(
         key: 'main',

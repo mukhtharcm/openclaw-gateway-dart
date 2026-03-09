@@ -1,5 +1,6 @@
 import 'package:openclaw_gateway/src/admin_models.dart';
 import 'package:openclaw_gateway/src/automation_models.dart';
+import 'package:openclaw_gateway/src/chat_models.dart';
 import 'package:openclaw_gateway/src/client.dart';
 import 'package:openclaw_gateway/src/event_models.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
@@ -117,6 +118,20 @@ class GatewayQueryClient {
       }),
     );
     return GatewaySessionsPreviewResult.fromJson(payload);
+  }
+
+  Future<GatewayChatHistoryResult> chatHistory({
+    required String sessionKey,
+    int? limit,
+  }) async {
+    final payload = await _client.requestJsonMap(
+      'chat.history',
+      params: withoutNulls({
+        'sessionKey': sessionKey,
+        'limit': limit,
+      }),
+    );
+    return GatewayChatHistoryResult.fromJson(payload);
   }
 
   Future<GatewayModelsListResult> modelsList() async {

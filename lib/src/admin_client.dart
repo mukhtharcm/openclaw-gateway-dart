@@ -1,5 +1,6 @@
 import 'package:openclaw_gateway/src/admin_models.dart';
 import 'package:openclaw_gateway/src/automation_models.dart';
+import 'package:openclaw_gateway/src/chat_models.dart';
 import 'package:openclaw_gateway/src/client.dart';
 import 'package:openclaw_gateway/src/mutation_models.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
@@ -91,6 +92,45 @@ class GatewayAdminClient {
       },
     );
     return GatewayVoiceWakeConfig.fromJson(payload);
+  }
+
+  Future<GatewayChatSendResult> chatSend({
+    required String sessionKey,
+    required String message,
+    String? thinking,
+    bool? deliver,
+    List<Object?>? attachments,
+    int? timeoutMs,
+    String? idempotencyKey,
+  }) async {
+    final payload = await _client.requestJsonMap(
+      'chat.send',
+      params: withoutNulls({
+        'sessionKey': sessionKey,
+        'message': message,
+        'thinking': thinking,
+        'deliver': deliver,
+        'attachments': attachments,
+        'timeoutMs': timeoutMs,
+        'idempotencyKey':
+            idempotencyKey ?? _client.createIdempotencyKey(prefix: 'chat'),
+      }),
+    );
+    return GatewayChatSendResult.fromJson(payload);
+  }
+
+  Future<GatewayChatAbortResult> chatAbort({
+    required String sessionKey,
+    String? runId,
+  }) async {
+    final payload = await _client.requestJsonMap(
+      'chat.abort',
+      params: withoutNulls({
+        'sessionKey': sessionKey,
+        'runId': runId,
+      }),
+    );
+    return GatewayChatAbortResult.fromJson(payload);
   }
 
   Future<GatewayOkResult> systemEvent({
