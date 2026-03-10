@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:openclaw_gateway/src/chat_models.dart';
 import 'package:openclaw_gateway/src/models.dart';
 import 'package:openclaw_gateway/src/protocol.dart';
 
@@ -964,6 +967,70 @@ class GatewayAgentToolData {
   final Object? result;
 }
 
+/// Returns a compact human-readable summary for a gateway event frame.
+String summarizeGatewayEventFrame(
+  GatewayEventFrame frame, {
+  int maxLength = 200,
+}) {
+  try {
+    final summary = switch (frame.event) {
+      'chat' => _summarizeChatEvent(
+          GatewayChatEvent.fromEventFrame(frame),
+          maxLength: maxLength,
+        ),
+      'presence' => _summarizePresenceEvent(
+          GatewayPresenceEvent.fromEventFrame(frame),
+        ),
+      'tick' => _summarizeTickEvent(GatewayTickEvent.fromEventFrame(frame)),
+      'shutdown' => _summarizeShutdownEvent(
+          GatewayShutdownEvent.fromEventFrame(frame),
+        ),
+      'health' =>
+        _summarizeHealthEvent(GatewayHealthEvent.fromEventFrame(frame)),
+      'heartbeat' => _summarizeHeartbeatEvent(
+          GatewayHeartbeatEvent.fromEventFrame(frame),
+          maxLength: maxLength,
+        ),
+      'cron' => _summarizeCronEvent(GatewayCronEvent.fromEventFrame(frame)),
+      'talk.mode' => _summarizeTalkModeEvent(
+          GatewayTalkModeEvent.fromEventFrame(frame),
+        ),
+      'node.pair.requested' => _summarizeNodePairRequestedEvent(
+          GatewayNodePairRequestedEvent.fromEventFrame(frame),
+        ),
+      'node.pair.resolved' => _summarizeNodePairResolvedEvent(
+          GatewayNodePairResolvedEvent.fromEventFrame(frame),
+        ),
+      'device.pair.requested' => _summarizeDevicePairRequestedEvent(
+          GatewayDevicePairRequestedEvent.fromEventFrame(frame),
+        ),
+      'device.pair.resolved' => _summarizeDevicePairResolvedEvent(
+          GatewayDevicePairResolvedEvent.fromEventFrame(frame),
+        ),
+      'voicewake.changed' => _summarizeVoiceWakeChangedEvent(
+          GatewayVoiceWakeChangedEvent.fromEventFrame(frame),
+        ),
+      'exec.approval.requested' => _summarizeExecApprovalRequestedEvent(
+          GatewayExecApprovalRequestedEvent.fromEventFrame(frame),
+        ),
+      'exec.approval.resolved' => _summarizeExecApprovalResolvedEvent(
+          GatewayExecApprovalResolvedEvent.fromEventFrame(frame),
+        ),
+      'update.available' => _summarizeUpdateAvailableEvent(
+          GatewayUpdateAvailableEvent.fromEventFrame(frame),
+        ),
+      'agent' => _summarizeAgentEvent(
+          GatewayAgentEvent.fromEventFrame(frame),
+          maxLength: maxLength,
+        ),
+      _ => _fallbackEventSummary(frame, maxLength),
+    };
+    return _truncateEventSummary(summary, maxLength);
+  } catch (_) {
+    return _fallbackEventSummary(frame, maxLength);
+  }
+}
+
 JsonMap _readEventPayload(GatewayEventFrame frame, String eventName) {
   if (frame.event != eventName) {
     throw StateError(
@@ -971,4 +1038,248 @@ JsonMap _readEventPayload(GatewayEventFrame frame, String eventName) {
     );
   }
   return asJsonMap(frame.payload, context: '$eventName payload');
+}
+
+String _summarizeChatEvent(GatewayChatEvent event, {required int maxLength}) {
+  final parts = <String>[event.sessionKey, event.state];
+  final detail = event.errorMessage ??
+      (event.message == null ? null : summarizeChatValue(event.message));
+  if (detail?.trim().isNotEmpty == true) {
+    parts.add(_truncateEventSummary(detail!, maxLength ~/ 2));
+  }
+  return parts.join(' · ');
+}
+
+String _summarizePresenceEvent(GatewayPresenceEvent event) {
+  if (event.presence.isEmpty) {
+    return 'no active clients';
+  }
+  final labels = event.presence
+      .map(
+        (entry) =>
+            entry.host ??
+            entry.deviceId ??
+            entry.instanceId ??
+            entry.platform ??
+            entry.mode,
+      )
+      .whereType<String>()
+      .where((value) => value.trim().isNotEmpty)
+      .take(3)
+      .toList(growable: false);
+  final head =
+      '${event.presence.length} active client${event.presence.length == 1 ? '' : 's'}';
+  return labels.isEmpty ? head : '$head · ${labels.join(', ')}';
+}
+
+String _summarizeTickEvent(GatewayTickEvent event) => 'tick ${event.ts}';
+
+String _summarizeShutdownEvent(GatewayShutdownEvent event) {
+  final parts = <String>[event.reason];
+  if (event.restartExpectedMs != null) {
+    parts.add('restart in ${event.restartExpectedMs} ms');
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeHealthEvent(GatewayHealthEvent event) {
+  final parts = <String>[event.ok ? 'healthy' : 'degraded'];
+  final channelCount = event.channelOrder.isNotEmpty
+      ? event.channelOrder.length
+      : event.channels.length;
+  if (channelCount > 0) {
+    parts.add('$channelCount channel${channelCount == 1 ? '' : 's'}');
+  }
+  if (event.heartbeatSeconds != null) {
+    parts.add('heartbeat ${event.heartbeatSeconds}s');
+  }
+  if (event.defaultAgentId?.trim().isNotEmpty == true) {
+    parts.add('agent ${event.defaultAgentId}');
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeHeartbeatEvent(
+  GatewayHeartbeatEvent event, {
+  required int maxLength,
+}) {
+  final parts = <String>[
+    if (event.channel?.trim().isNotEmpty == true) event.channel!,
+    event.status,
+  ];
+  if (event.preview?.trim().isNotEmpty == true) {
+    parts.add(_truncateEventSummary(event.preview!, maxLength ~/ 2));
+  } else if (event.reason?.trim().isNotEmpty == true) {
+    parts.add(event.reason!);
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeCronEvent(GatewayCronEvent event) {
+  final parts = <String>[
+    event.jobName?.trim().isNotEmpty == true ? event.jobName! : event.jobId,
+    event.action,
+  ];
+  if (event.status?.trim().isNotEmpty == true) {
+    parts.add(event.status!);
+  } else if (event.error?.trim().isNotEmpty == true) {
+    parts.add(event.error!);
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeTalkModeEvent(GatewayTalkModeEvent event) {
+  final parts = <String>[event.enabled ? 'enabled' : 'disabled'];
+  if (event.phase?.trim().isNotEmpty == true) {
+    parts.add(event.phase!);
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeNodePairRequestedEvent(GatewayNodePairRequestedEvent event) {
+  final parts = <String>[
+    event.displayName?.trim().isNotEmpty == true
+        ? event.displayName!
+        : event.nodeId,
+    'pair requested',
+  ];
+  if (event.commands.isNotEmpty) {
+    parts.add(
+        '${event.commands.length} command${event.commands.length == 1 ? '' : 's'}');
+  } else if (event.caps.isNotEmpty) {
+    parts.add('${event.caps.length} cap${event.caps.length == 1 ? '' : 's'}');
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeNodePairResolvedEvent(GatewayNodePairResolvedEvent event) =>
+    '${event.nodeId} · ${event.decision}';
+
+String _summarizeDevicePairRequestedEvent(
+  GatewayDevicePairRequestedEvent event,
+) {
+  final parts = <String>[
+    event.displayName?.trim().isNotEmpty == true
+        ? event.displayName!
+        : event.deviceId,
+    'pair requested',
+  ];
+  if (event.role?.trim().isNotEmpty == true) {
+    parts.add(event.role!);
+  } else if (event.roles.isNotEmpty) {
+    parts.add(event.roles.join(', '));
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeDevicePairResolvedEvent(
+  GatewayDevicePairResolvedEvent event,
+) =>
+    '${event.deviceId} · ${event.decision}';
+
+String _summarizeVoiceWakeChangedEvent(GatewayVoiceWakeChangedEvent event) {
+  if (event.triggers.isEmpty) {
+    return 'no wake triggers';
+  }
+  return '${event.triggers.length} wake trigger${event.triggers.length == 1 ? '' : 's'} · ${event.triggers.take(3).join(', ')}';
+}
+
+String _summarizeExecApprovalRequestedEvent(
+  GatewayExecApprovalRequestedEvent event,
+) {
+  final parts = <String>[event.request.command];
+  if (event.request.cwd?.trim().isNotEmpty == true) {
+    parts.add(event.request.cwd!);
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeExecApprovalResolvedEvent(
+  GatewayExecApprovalResolvedEvent event,
+) {
+  final parts = <String>[
+    event.request?.command ?? event.id,
+    event.decision,
+  ];
+  if (event.resolvedBy?.trim().isNotEmpty == true) {
+    parts.add(event.resolvedBy!);
+  }
+  return parts.join(' · ');
+}
+
+String _summarizeUpdateAvailableEvent(GatewayUpdateAvailableEvent event) {
+  final update = event.updateAvailable;
+  if (update == null) {
+    return 'update available';
+  }
+  return '${update.currentVersion} → ${update.latestVersion} (${update.channel})';
+}
+
+String _summarizeAgentEvent(
+  GatewayAgentEvent event, {
+  required int maxLength,
+}) {
+  final lifecycle = event.lifecycleData;
+  if (lifecycle != null) {
+    final parts = <String>['lifecycle', lifecycle.phase];
+    if (lifecycle.error?.trim().isNotEmpty == true) {
+      parts.add(lifecycle.error!);
+    }
+    return parts.join(' · ');
+  }
+
+  final assistant = event.assistantData;
+  if (assistant != null) {
+    final text = assistant.delta ?? assistant.text;
+    final parts = <String>['assistant'];
+    if (text?.trim().isNotEmpty == true) {
+      parts.add(_truncateEventSummary(text!, maxLength ~/ 2));
+    } else if (assistant.mediaUrls.isNotEmpty) {
+      parts.add(
+          '${assistant.mediaUrls.length} media item${assistant.mediaUrls.length == 1 ? '' : 's'}');
+    }
+    return parts.join(' · ');
+  }
+
+  final tool = event.toolData;
+  if (tool != null) {
+    final parts = <String>[
+      tool.name?.trim().isNotEmpty == true ? tool.name! : 'tool',
+      tool.phase,
+    ];
+    final resultPreview = tool.partialResult ?? tool.result ?? tool.args;
+    if (resultPreview != null) {
+      parts.add(
+        _truncateEventSummary(
+            summarizeChatValue(resultPreview), maxLength ~/ 2),
+      );
+    } else if (tool.isError == true) {
+      parts.add('error');
+    }
+    return parts.join(' · ');
+  }
+
+  return event.streamName;
+}
+
+String _fallbackEventSummary(GatewayEventFrame frame, int maxLength) {
+  if (frame.payload == null) {
+    return '(no payload)';
+  }
+  try {
+    final pretty = const JsonEncoder.withIndent('  ').convert(frame.payload);
+    return _truncateEventSummary(
+      pretty.replaceAll(RegExp(r'\s+'), ' ').trim(),
+      maxLength,
+    );
+  } catch (_) {
+    return _truncateEventSummary(frame.payload.toString(), maxLength);
+  }
+}
+
+String _truncateEventSummary(String value, int maxLength) {
+  if (value.length <= maxLength) {
+    return value;
+  }
+  return '${value.substring(0, maxLength - 1)}…';
 }

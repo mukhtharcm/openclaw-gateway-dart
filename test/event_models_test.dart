@@ -167,4 +167,77 @@ void main() {
     expect(agentEvent.toolData?.phase, 'result');
     expect(agentEvent.toolData?.name, 'shell');
   });
+
+  test('summarizes typed gateway events without raw payload dumps', () {
+    final chatSummary = summarizeGatewayEventFrame(
+      GatewayEventFrame.fromJson({
+        'type': 'event',
+        'event': 'chat',
+        'payload': {
+          'runId': 'run-1',
+          'sessionKey': 'main',
+          'seq': 3,
+          'state': 'delta',
+          'message': {
+            'role': 'assistant',
+            'content': [
+              {'type': 'text', 'text': 'Hello from the gateway stream.'},
+            ],
+          },
+        },
+      }),
+    );
+    expect(chatSummary, contains('main'));
+    expect(chatSummary, contains('delta'));
+    expect(chatSummary, contains('Hello from the gateway stream.'));
+
+    final heartbeatSummary = summarizeGatewayEventFrame(
+      GatewayEventFrame.fromJson({
+        'type': 'event',
+        'event': 'heartbeat',
+        'payload': {
+          'ts': 55,
+          'status': 'sent',
+          'channel': 'telegram',
+          'preview': 'Morning heartbeat',
+        },
+      }),
+    );
+    expect(heartbeatSummary, 'telegram · sent · Morning heartbeat');
+
+    final agentSummary = summarizeGatewayEventFrame(
+      GatewayEventFrame.fromJson({
+        'type': 'event',
+        'event': 'agent',
+        'payload': {
+          'runId': 'run-1',
+          'stream': 'tool',
+          'ts': 99,
+          'data': {
+            'phase': 'result',
+            'name': 'shell',
+            'result': {'ok': true},
+          },
+        },
+      }),
+    );
+    expect(agentSummary, contains('shell'));
+    expect(agentSummary, contains('result'));
+    expect(agentSummary, contains('ok'));
+
+    final updateSummary = summarizeGatewayEventFrame(
+      GatewayEventFrame.fromJson({
+        'type': 'event',
+        'event': 'update.available',
+        'payload': {
+          'updateAvailable': {
+            'currentVersion': '2026.3.8',
+            'latestVersion': '2026.3.9',
+            'channel': 'stable',
+          },
+        },
+      }),
+    );
+    expect(updateSummary, '2026.3.8 → 2026.3.9 (stable)');
+  });
 }
