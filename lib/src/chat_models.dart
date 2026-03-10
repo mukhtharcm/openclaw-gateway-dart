@@ -167,6 +167,19 @@ class GatewayChatMessage {
 
   bool get hasAttachments => content.any((part) => part.isAttachment);
 
+  List<GatewayChatMessageContent> get attachmentParts =>
+      content.where((part) => part.isAttachment).toList(growable: false);
+
+  List<GatewayChatMessageContent> get toolCallParts =>
+      content.where((part) => part.isToolCall).toList(growable: false);
+
+  List<GatewayChatMessageContent> get toolResultParts =>
+      content.where((part) => part.isToolResult).toList(growable: false);
+
+  List<GatewayChatMessageContent> get thinkingParts => content
+      .where((part) => part.thinking?.trim().isNotEmpty == true)
+      .toList(growable: false);
+
   String get identityKey {
     final timestampKey = timestamp == null ? '' : timestamp!.toStringAsFixed(3);
     final contentKey = content.map((part) => part.identityKey).join('\u001E');
@@ -253,6 +266,28 @@ class GatewayChatMessageContent {
 
   bool get isToolResult =>
       normalizedType == 'toolresult' || normalizedType == 'tool_result';
+
+  Object? get structuredPayload => arguments ?? content;
+
+  bool get hasStructuredPayload => structuredPayload != null;
+
+  String get displayLabel {
+    for (final candidate in <String?>[
+      fileName,
+      name,
+      id,
+      mimeType,
+    ]) {
+      final trimmed = candidate?.trim();
+      if (trimmed != null && trimmed.isNotEmpty) {
+        return trimmed;
+      }
+    }
+    return normalizedType;
+  }
+
+  String get structuredPreview =>
+      summarizeChatValue(structuredPayload, maxLength: 140);
 
   String get identityKey => [
         normalizedType,
@@ -424,9 +459,22 @@ double? _readNullableDouble(Object? value) {
 }
 
 String debugChatMessage(Object? value) {
+  return prettyChatValue(value);
+}
+
+String prettyChatValue(Object? value) {
   try {
     return const JsonEncoder.withIndent('  ').convert(value);
   } catch (_) {
     return value.toString();
   }
+}
+
+String summarizeChatValue(Object? value, {int maxLength = 180}) {
+  final formatted =
+      prettyChatValue(value).replaceAll(RegExp(r'\s+'), ' ').trim();
+  if (formatted.length <= maxLength) {
+    return formatted;
+  }
+  return '${formatted.substring(0, maxLength - 1)}…';
 }

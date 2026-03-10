@@ -93,4 +93,49 @@ void main() {
       isFalse,
     );
   });
+
+  test('exposes structured chat helpers for transcript rendering', () {
+    final message = GatewayChatMessage.fromJson({
+      'role': 'assistant',
+      'toolName': 'shell',
+      'toolCallId': 'call-1',
+      'content': [
+        {
+          'type': 'tool_call',
+          'id': 'tool-1',
+          'name': 'shell',
+          'arguments': {'cmd': 'pwd'},
+        },
+        {
+          'type': 'tool_result',
+          'id': 'tool-1',
+          'content': {'cwd': '/tmp'},
+        },
+        {
+          'type': 'attachment',
+          'fileName': 'image.png',
+          'mimeType': 'image/png',
+        },
+        {
+          'type': 'reasoning',
+          'thinking': 'checking the working directory',
+          'thinkingSignature': 'sig-1',
+        },
+      ],
+    });
+
+    expect(message.toolCallParts, hasLength(1));
+    expect(message.toolResultParts, hasLength(1));
+    expect(message.attachmentParts, hasLength(1));
+    expect(message.thinkingParts, hasLength(1));
+    expect(message.toolCallParts.single.displayLabel, 'shell');
+    expect(
+      message.toolCallParts.single.structuredPreview,
+      contains('pwd'),
+    );
+    expect(
+      summarizeChatValue({'cwd': '/tmp'}, maxLength: 24),
+      contains('/tmp'),
+    );
+  });
 }
