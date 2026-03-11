@@ -88,6 +88,41 @@ void main() {
     );
   });
 
+  test('node registry forwards tls policy into connect options', () async {
+    final registry = GatewayNodeCapabilityRegistry(
+      capabilities: const <GatewayNodeCapability>[
+        GatewayNodeCapability(name: 'system'),
+      ],
+      commands: <GatewayNodeCommand>[
+        GatewayNodeCommand(
+          name: 'system.notify',
+          capabilities: const <String>['system'],
+          handler: (_) async => const GatewayNodeCommandResult.ok(),
+        ),
+      ],
+    );
+    final tlsPolicy = GatewayTlsPolicy.trustOnFirstUse(
+      stableId: 'gateway.example',
+      fingerprintStore: GatewayMemoryTlsFingerprintStore(),
+    );
+
+    final options = await registry.buildConnectOptions(
+      uri: Uri.parse('wss://gateway.example'),
+      auth: const GatewayAuth.none(),
+      clientInfo: const GatewayClientInfo(
+        id: GatewayClientIds.nodeHost,
+        version: '0.1.0',
+        platform: 'dart',
+        mode: GatewayClientModes.node,
+      ),
+      tlsPolicy: tlsPolicy,
+    );
+
+    expect(options.role, gatewayNodeRole);
+    expect(options.commands, contains('system.notify'));
+    expect(options.tlsPolicy?.stableId, 'gateway.example');
+  });
+
   test('exposes canonical gateway client ids and modes', () {
     expect(GatewayClientIds.values, contains(GatewayClientIds.gatewayClient));
     expect(GatewayClientIds.values, contains(GatewayClientIds.nodeHost));

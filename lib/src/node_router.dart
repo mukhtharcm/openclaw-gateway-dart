@@ -6,6 +6,7 @@ import 'package:openclaw_gateway/src/device_identity.dart';
 import 'package:openclaw_gateway/src/device_token_store.dart';
 import 'package:openclaw_gateway/src/models.dart';
 import 'package:openclaw_gateway/src/node_models.dart';
+import 'package:openclaw_gateway/src/tls.dart';
 
 typedef GatewayNodeAvailabilityResolver = FutureOr<bool> Function();
 typedef GatewayNodePermissionResolver = FutureOr<Map<String, bool>> Function();
@@ -175,6 +176,7 @@ class GatewayNodeCapabilityRegistry {
     String? userAgent,
     GatewayDeviceIdentity? deviceIdentity,
     GatewayDeviceTokenStore? deviceTokenStore,
+    GatewayTlsPolicy? tlsPolicy,
     Duration connectChallengeTimeout = const Duration(seconds: 6),
     Duration connectResponseTimeout = const Duration(seconds: 12),
     Duration requestTimeout = const Duration(seconds: 15),
