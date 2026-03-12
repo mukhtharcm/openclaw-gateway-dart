@@ -200,6 +200,7 @@ class GatewayNodeCapabilityRegistry {
       userAgent: userAgent,
       deviceIdentity: deviceIdentity,
       deviceTokenStore: deviceTokenStore,
+      tlsPolicy: tlsPolicy,
       connectChallengeTimeout: connectChallengeTimeout,
       connectResponseTimeout: connectResponseTimeout,
       requestTimeout: requestTimeout,
